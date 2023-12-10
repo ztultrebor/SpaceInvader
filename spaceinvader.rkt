@@ -57,12 +57,12 @@
 (define ALTITUDE 100)
 (define GROUNDLEVEL (- HEIGHT ALTITUDE))
 (define INITTANKPARAMS (make-parameters (make-vector (/ WIDTH 2) GROUNDLEVEL)
-                                        (make-vector -3 0)))
+                                        (make-vector 0 0)))
 (define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
                                            (make-vector 0 1)))
 (define MISSILEVELOCITY -10)
 (define BLASTRADIUS 75)
-(define TANKSPEED 3)
+(define TANKSPEED (make-vector 3 0))
 (define BACKGROUND
   (overlay/align "left" "bottom"
                  (rectangle WIDTH ALTITUDE "solid" "light green")
@@ -121,8 +121,8 @@
   ;; ends when missile destroys invader, missile misses invader,
   ;;     or invader successfully lands
   (cond
-    [(alien-invasion? objs) #t]
     [(false? (war-objects-missile objs)) #f]
+    [(alien-invasion? objs) #t]
     [(target-eliminated? objs) #t]
     [(misfire? objs) #t] 
     [else #f]))
@@ -158,21 +158,20 @@
     [(false? tank) #f]
     [(key=? "left" ke) (make-parameters
                         (parameters-position tank)
-                        (make-vector (- TANKSPEED)
-                                     (vector-y (parameters-velocity tank))))]
+                        (-vec (parameters-velocity tank) TANKSPEED))]
     [(key=? "right" ke) (make-parameters
                          (parameters-position tank)
-                         (make-vector TANKSPEED
-                                      (vector-y (parameters-velocity tank))))]
+                         (+vec (parameters-velocity tank) TANKSPEED))]
     [else tank]))
 ;; checks
 (check-expect (tank-control #f "left") #f)
 (check-expect (tank-control
                (make-parameters (make-vector 0 0) (make-vector 0 0)) "left")
-              (make-parameters (make-vector 0 0) (make-vector (- TANKSPEED) 0)))
+              (make-parameters (make-vector 0 0)
+                               (-vec (make-vector 0 0) TANKSPEED)))
 (check-expect (tank-control
                (make-parameters (make-vector 0 0) (make-vector 0 0)) "right")
-              (make-parameters (make-vector 0 0) (make-vector TANKSPEED 0)))
+              (make-parameters (make-vector 0 0) TANKSPEED))
 (check-expect (tank-control
                (make-parameters (make-vector 0 0) (make-vector 0 0)) " ")
               (make-parameters (make-vector 0 0) (make-vector 0 0)))
@@ -213,10 +212,7 @@
   (cond
     [(false? w)  w]
     [else   (make-parameters
-             (make-vector (+ (vector-x (parameters-position w))
-                             (vector-x (parameters-velocity w)))
-                          (+ (vector-y (parameters-position w))
-                             (vector-y (parameters-velocity w))))
+             (+vec (parameters-position w) (parameters-velocity w))
              (parameters-velocity w))]))
 ;; checks
 (check-expect (move (make-parameters (make-vector 12 5) (make-vector 12 5)))
@@ -225,6 +221,28 @@
               (make-parameters (make-vector 12 5) (make-vector 0 0)))
 (check-expect (move (make-parameters (make-vector 0 0) (make-vector 12 5)))
               (make-parameters (make-vector 12 5) (make-vector 12 5)))
+
+
+(define (+vec v1 v2)
+  ;; Vector, Vector -> Vector
+  ;; add one vector to another
+  (make-vector (+ (vector-x v1) (vector-x v2))
+               (+ (vector-y v1) (vector-y v2))))
+;; checks
+(check-expect (+vec (make-vector 12 5) (make-vector 12 5)) (make-vector 24 10))
+(check-expect (+vec (make-vector 12 5) (make-vector 0 0)) (make-vector 12 5))
+(check-expect (+vec (make-vector 0 0) (make-vector 12 5)) (make-vector 12 5))
+
+
+(define (-vec v1 v2)
+  ;; Vector, Vector -> Vector
+  ;; subtract one vector from another
+  (make-vector (- (vector-x v1) (vector-x v2))
+               (- (vector-y v1) (vector-y v2))))
+;; checks
+(check-expect (-vec (make-vector 12 5) (make-vector 12 5)) (make-vector 0 0))
+(check-expect (-vec (make-vector 12 5) (make-vector 0 0)) (make-vector 12 5))
+(check-expect (-vec (make-vector 0 0) (make-vector 12 5)) (make-vector -12 -5))
 
 
 (define (jitter w)
