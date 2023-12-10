@@ -81,7 +81,7 @@
   (big-bang objs
     [on-tick deploy]
     [to-draw render]
-    ; [on-key impulse)) !!!
+    [on-key control]
     ;[stop-when crashed? render])) ;; be sure to show explosion
     ))
 
@@ -100,6 +100,22 @@
                 (insert-image (war-objects-invader objs) INVADER
                               (insert-image (war-objects-missile objs) MISSILE
                                             BACKGROUND))))
+
+(define (control objs ke)
+  (make-war-objects
+   (cond
+     [(false? (war-objects-tank objs)) #f]
+     [(key=? "left" ke) (make-parameters
+                         (parameters-position (war-objects-tank objs))
+                         (make-vector -3 (vector-y (parameters-velocity
+                                                    (war-objects-tank objs)))))]
+     [(key=? "right" ke) (make-parameters
+                          (parameters-position (war-objects-tank objs))
+                          (make-vector 3 (vector-y (parameters-velocity
+                                                    (war-objects-tank objs)))))])
+   (war-objects-invader objs)
+   (war-objects-missile objs)))
+
 
 (define (insert-image weap weap-img background)  
   ;; Weapon, Img, Img -> Img
