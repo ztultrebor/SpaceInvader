@@ -60,6 +60,8 @@
                                         (make-vector 0 0)))
 (define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
                                            (make-vector 0 1)))
+(define MISSILEVELOCITY -10)
+(define TANKVELOCITY 3)
 (define BACKGROUND
   (overlay/align "left" "bottom"
                  (rectangle WIDTH ALTITUDE "solid" "light green")
@@ -102,20 +104,67 @@
                                             BACKGROUND))))
 
 (define (control objs ke)
+  ;; WarObjects -> WarObjects
+  ;; move tank with left- & right-arrows, and fire missile on spacebar
   (make-war-objects
-   (cond
-     [(false? (war-objects-tank objs)) #f]
-     [(key=? "left" ke) (make-parameters
-                         (parameters-position (war-objects-tank objs))
-                         (make-vector -3 (vector-y (parameters-velocity
-                                                    (war-objects-tank objs)))))]
-     [(key=? "right" ke) (make-parameters
-                          (parameters-position (war-objects-tank objs))
-                          (make-vector 3 (vector-y (parameters-velocity
-                                                    (war-objects-tank objs)))))])
+   (tank-control (war-objects-tank objs) ke)
    (war-objects-invader objs)
-   (war-objects-missile objs)))
+   (missile-control (war-objects-missile objs) (war-objects-tank objs) ke)))
 
+
+(define (tank-control tank ke)
+  ;; Weapon, Key Event -> Weapon
+  ;; send tank tank left with left arrow or right with right
+  (cond
+    [(false? tank) #f]
+    [(key=? "left" ke) (make-parameters
+                        (parameters-position tank)
+                        (make-vector -3 (vector-y (parameters-velocity tank))))]
+    [(key=? "right" ke) (make-parameters
+                         (parameters-position tank)
+                         (make-vector 3 (vector-y (parameters-velocity tank))))]
+    [else tank]))
+;; checks
+(check-expect (tank-control #f "left") #f)
+(check-expect (tank-control
+               (make-parameters (make-vector 0 0) (make-vector 0 0)) "left")
+              (make-parameters (make-vector 0 0) (make-vector -3 0)))
+(check-expect (tank-control
+               (make-parameters (make-vector 0 0) (make-vector 0 0)) "right")
+              (make-parameters (make-vector 0 0) (make-vector 3 0)))
+(check-expect (tank-control
+               (make-parameters (make-vector 0 0) (make-vector 0 0)) " ")
+              (make-parameters (make-vector 0 0) (make-vector 0 0)))
+
+
+(define (missile-control missile tank ke)
+  ;; Weapon, Weapon, Key Event -> Weapon
+  ;; fire missile on spacebar; missile takes x-position anf velocity of tank
+  (cond
+    [(and (false? tank) (false? missile)) #f]
+    [(and (false? missile) (key=? " " ke))
+     (make-parameters (parameters-position tank)
+                      (make-vector (vector-x (parameters-velocity tank))
+                                   MISSILEVELOCITY))]
+    [else missile]))
+;; checks
+(check-expect (missile-control #f #f " ") #f)
+(check-expect (missile-control
+               #f (make-parameters (make-vector 27 42)
+                                   (make-vector TANKVELOCITY 0)) " ")
+              (make-parameters (make-vector 27 42)
+                               (make-vector TANKVELOCITY MISSILEVELOCITY)))
+(check-expect (missile-control
+               #f (make-parameters (make-vector 27 42)
+                                   (make-vector TANKVELOCITY 0)) "left") #f)
+(check-expect (missile-control
+               (make-parameters (make-vector 39 222)
+                                (make-vector 0  MISSILEVELOCITY))
+               (make-parameters (make-vector 27 42)
+                                (make-vector TANKVELOCITY 0)) " ")
+              (make-parameters (make-vector 39 222)
+                               (make-vector 0 MISSILEVELOCITY)))
+  
 
 (define (insert-image weap weap-img background)  
   ;; Weapon, Img, Img -> Img
@@ -158,7 +207,7 @@
   ;; Weapon -> Weapon
   ;; update velocity vector with some randomness
   (cond
-    [(false? w)  w]
+    [(false? w)  #f]
     [else (make-parameters
            (parameters-position w)
            (make-vector (+ (random 51) -25)
