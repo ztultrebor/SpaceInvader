@@ -10,7 +10,7 @@
 (define-struct war-objects (tank invader missile))
 ;; A WarObjects is a make-war-objects [Weapon Weapon Weapon]
 ;;     a collection of war weapons and vehicles:
-;;        includes a heroic tank, an spooky invader and a missle
+;;        includes a heroic tank, a spooky invader and a missle
 ;;        to shoot it down
 #;
 (define (fn-with-war-objects objs)
@@ -59,7 +59,7 @@
 (define INITTANKPARAMS (make-parameters (make-vector (/ WIDTH 2) GROUNDLEVEL)
                                         (make-vector 0 0)))
 (define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
-                                           (make-vector 0 0)))
+                                           (make-vector 0 1)))
 (define BACKGROUND
   (overlay/align "left" "bottom"
                  (rectangle WIDTH ALTITUDE "solid" "light green")
@@ -79,32 +79,32 @@
   ;; WarObjects -> WarObjects
   ;; run the pocket universe
   (big-bang objs
-    ;[on-tick deploy]
+    [on-tick deploy]
     [to-draw render]
     ; [on-key impulse)) !!!
     ;[stop-when crashed? render])) ;; be sure to show explosion
     ))
 
-    
-;; WarObjects -> WarObjects
-;; war objects move around in accordance with user input and hard wiring
-(define (deploy objs)
-  (... (war-objects-tank objs) ...))
+(define (deploy objs)   
+  ;; WarObjects -> WarObjects
+  ;; war objects move around in accordance with user input and hard wiring
+  (make-war-objects  (move (war-objects-tank objs))
+                     (move (war-objects-invader objs))
+                     (move (war-objects-missile objs))))
 
 
-;; WarObjects -> Img
-;; display the scene with current positions of all war objects
 (define (render objs)
+  ;; WarObjects -> Img
+  ;; display the scene with current positions of all war objects
   (insert-image (war-objects-tank objs) TANK
                 (insert-image (war-objects-invader objs) INVADER
                               (insert-image (war-objects-missile objs) MISSILE
-                              BACKGROUND))))
+                                            BACKGROUND))))
 
-    
-;; Weapon, Img, Img -> Img
-;; takes a weapon and an image for that weapon and places the
-;;     image into the image for the background
-(define (insert-image weap weap-img background)
+(define (insert-image weap weap-img background)  
+  ;; Weapon, Img, Img -> Img
+  ;; takes a weapon and an image for that weapon and places the
+  ;;     image into the image for the background
   (cond
     [(false? weap) background]
     [else (place-image/align weap-img (vector-x (parameters-position weap))
@@ -118,6 +118,27 @@
 (check-expect (insert-image #f TANK BACKGROUND) BACKGROUND)
 
 
+(define (move w)
+  ;; Weapon -> Weapon
+  ;; add update position vector with velocity
+  (cond
+    [(false? w)  w]
+    [else   (make-parameters
+             (make-vector (+ (vector-x (parameters-position w))
+                             (vector-x (parameters-velocity w)))
+                          (+ (vector-y (parameters-position w))
+                             (vector-y (parameters-velocity w))))
+             (parameters-velocity w))]))
+;; checks
+(check-expect (move (make-parameters (make-vector 12 5) (make-vector 12 5)))
+               (make-parameters (make-vector 24 10) (make-vector 12 5)))
+(check-expect (move (make-parameters (make-vector 12 5) (make-vector 0 0)))
+              (make-parameters (make-vector 12 5) (make-vector 0 0)))
+(check-expect (move (make-parameters (make-vector 0 0) (make-vector 12 5)))
+              (make-parameters (make-vector 12 5) (make-vector 12 5)))
+
+
+  random
 ;; actions!
 
 (main (make-war-objects INITTANKPARAMS INITINVADERPARAMS #f))
