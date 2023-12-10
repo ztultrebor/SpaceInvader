@@ -89,7 +89,7 @@
   ;; WarObjects -> WarObjects
   ;; war objects move around in accordance with user input and hard wiring
   (make-war-objects  (move (war-objects-tank objs))
-                     (move (war-objects-invader objs))
+                     (move (jitter (war-objects-invader objs)))
                      (move (war-objects-missile objs))))
 
 
@@ -131,14 +131,30 @@
              (parameters-velocity w))]))
 ;; checks
 (check-expect (move (make-parameters (make-vector 12 5) (make-vector 12 5)))
-               (make-parameters (make-vector 24 10) (make-vector 12 5)))
+              (make-parameters (make-vector 24 10) (make-vector 12 5)))
 (check-expect (move (make-parameters (make-vector 12 5) (make-vector 0 0)))
               (make-parameters (make-vector 12 5) (make-vector 0 0)))
 (check-expect (move (make-parameters (make-vector 0 0) (make-vector 12 5)))
               (make-parameters (make-vector 12 5) (make-vector 12 5)))
 
 
-  random
+(define (jitter w)
+  ;; Weapon -> Weapon
+  ;; update velocity vector with some randomness
+  (cond
+    [(false? w)  w]
+    [else (make-parameters
+           (parameters-position w)
+           (make-vector (+ (random 51) -25)
+                        (vector-y (parameters-velocity w))))]))
+;; checks
+(check-expect (move (make-parameters (make-vector 12 5) (make-vector 12 5)))
+              (make-parameters (make-vector 24 10) (make-vector 12 5)))
+(check-expect (move (make-parameters (make-vector 12 5) (make-vector 0 0)))
+              (make-parameters (make-vector 12 5) (make-vector 0 0)))
+(check-expect (move (make-parameters (make-vector 0 0) (make-vector 12 5)))
+              (make-parameters (make-vector 12 5) (make-vector 12 5)))
+
 ;; actions!
 
 (main (make-war-objects INITTANKPARAMS INITINVADERPARAMS #f))
