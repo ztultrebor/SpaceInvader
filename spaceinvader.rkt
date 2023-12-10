@@ -57,11 +57,11 @@
 (define ALTITUDE 100)
 (define GROUNDLEVEL (- HEIGHT ALTITUDE))
 (define INITTANKPARAMS (make-parameters (make-vector (/ WIDTH 2) GROUNDLEVEL)
-                                        (make-vector 0 0)))
+                                        (make-vector -3 0)))
 (define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
                                            (make-vector 0 1)))
 (define MISSILEVELOCITY -10)
-(define BLASTRADIUS 20)
+(define BLASTRADIUS 75)
 (define TANKSPEED 3)
 (define BACKGROUND
   (overlay/align "left" "bottom"
@@ -73,8 +73,9 @@
 (define INVADER (overlay (circle 20 "solid" "green")
                          (rectangle 80 20 "solid" "green")))
 (define MISSILE (rectangle 16 40 "solid" "red"))
-(define DESTRUCTION (radial-star 8 16 32 "solid" "red"))
-(define HIT (radial-star 12 32 64 "solid" "green"))
+(define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
+(define DETONATION (radial-star 8 20 50 "solid" "red"))
+(define HIT (radial-star 12 50 100 "solid" "green"))
 
 
 ; functions
@@ -252,13 +253,13 @@
     [(false? weap) background]
     [else (place-image/align weap-img (vector-x (parameters-position weap))
                              (vector-y (parameters-position weap))
-                             "center" "bottom" background)]))
+                             "center" "center" background)]))
 ; checks
 (check-expect (insert-image (make-parameters
                              (make-vector (/ WIDTH 2) GROUNDLEVEL)
                              (make-vector 0 0)) TANK BACKGROUND)
               (place-image/align TANK (/ WIDTH 2) GROUNDLEVEL
-                                 "center" "bottom" BACKGROUND))
+                                 "center" "center" BACKGROUND))
 (check-expect (insert-image #f TANK BACKGROUND) BACKGROUND)
 
 
@@ -360,11 +361,11 @@
     [(alien-invasion? objs)
      (insert-image (war-objects-tank objs) DESTRUCTION (render objs))]
     [(target-eliminated? objs)
-     (insert-image (war-objects-missile objs) DESTRUCTION
-                   (insert-image (war-objects-missile objs) HIT 
+     (insert-image (war-objects-missile objs) DETONATION
+                   (insert-image (war-objects-invader objs) HIT 
                                  (render objs)))]
     [(misfire? objs)
-     (insert-image (war-objects-missile objs) DESTRUCTION
+     (insert-image (war-objects-missile objs) DETONATION
                    (render objs))]))
 
 ;; actions!
