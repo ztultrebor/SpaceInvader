@@ -61,7 +61,8 @@
 (define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
                                            (make-vector 0 1)))
 (define MISSILEVELOCITY -10)
-(define TANKVELOCITY 3)
+(define BLASTRADIUS 20)
+(define TANKSPEED 3)
 (define BACKGROUND
   (overlay/align "left" "bottom"
                  (rectangle WIDTH ALTITUDE "solid" "light green")
@@ -72,7 +73,8 @@
 (define INVADER (overlay (circle 20 "solid" "green")
                          (rectangle 80 20 "solid" "green")))
 (define MISSILE (rectangle 16 40 "solid" "red"))
-
+(define DESTRUCTION (radial-star 8 16 32 "solid" "red"))
+(define HIT (radial-star 12 32 64 "solid" "green"))
 
 
 ; functions
@@ -81,11 +83,20 @@
   ;; WarObjects -> WarObjects
   ;; run the pocket universe
   (big-bang objs
+    [on-key control]
     [on-tick deploy]
     [to-draw render]
-    [on-key control]
-    ;[stop-when crashed? render])) ;; be sure to show explosion
-    ))
+    [stop-when victory-or-defeat? explosion])) ;; be sure to show explosions
+
+
+(define (control objs ke)
+  ;; WarObjects -> WarObjects
+  ;; move tank with left- & right-arrows, and fire missile on spacebar
+  (make-war-objects
+   (tank-control (war-objects-tank objs) ke)
+   (war-objects-invader objs)
+   (missile-control (war-objects-missile objs) (war-objects-tank objs) ke)))
+
 
 (define (deploy objs)   
   ;; WarObjects -> WarObjects
@@ -103,14 +114,41 @@
                               (insert-image (war-objects-missile objs) MISSILE
                                             BACKGROUND))))
 
-(define (control objs ke)
-  ;; WarObjects -> WarObjects
-  ;; move tank with left- & right-arrows, and fire missile on spacebar
-  (make-war-objects
-   (tank-control (war-objects-tank objs) ke)
-   (war-objects-invader objs)
-   (missile-control (war-objects-missile objs) (war-objects-tank objs) ke)))
 
+(define (victory-or-defeat? objs)
+  ;; WarObjects -> Bool
+  ;; ends when missile destroys invader, missile misses invader,
+  ;;     or invader successfully lands
+  (cond
+    [(alien-invasion? objs) #t]
+    [(false? (war-objects-missile objs)) #f]
+    [(target-eliminated? objs) #t]
+    [(misfire? objs) #t] 
+    [else #f]))
+; checks
+(check-expect (victory-or-defeat?
+               (make-war-objects INITTANKPARAMS INITINVADERPARAMS #f)) #f)
+(check-expect (victory-or-defeat?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0)))) #t)
+(check-expect (victory-or-defeat?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 500 100)
+                                                  (make-vector 0 0)))) #f)
+(check-expect (victory-or-defeat?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 300)
+                                                  (make-vector 0 0)))) #f)
 
 (define (tank-control tank ke)
   ;; Weapon, Key Event -> Weapon
@@ -119,19 +157,21 @@
     [(false? tank) #f]
     [(key=? "left" ke) (make-parameters
                         (parameters-position tank)
-                        (make-vector -3 (vector-y (parameters-velocity tank))))]
+                        (make-vector (- TANKSPEED)
+                                     (vector-y (parameters-velocity tank))))]
     [(key=? "right" ke) (make-parameters
                          (parameters-position tank)
-                         (make-vector 3 (vector-y (parameters-velocity tank))))]
+                         (make-vector TANKSPEED
+                                      (vector-y (parameters-velocity tank))))]
     [else tank]))
 ;; checks
 (check-expect (tank-control #f "left") #f)
 (check-expect (tank-control
                (make-parameters (make-vector 0 0) (make-vector 0 0)) "left")
-              (make-parameters (make-vector 0 0) (make-vector -3 0)))
+              (make-parameters (make-vector 0 0) (make-vector (- TANKSPEED) 0)))
 (check-expect (tank-control
                (make-parameters (make-vector 0 0) (make-vector 0 0)) "right")
-              (make-parameters (make-vector 0 0) (make-vector 3 0)))
+              (make-parameters (make-vector 0 0) (make-vector TANKSPEED 0)))
 (check-expect (tank-control
                (make-parameters (make-vector 0 0) (make-vector 0 0)) " ")
               (make-parameters (make-vector 0 0) (make-vector 0 0)))
@@ -151,41 +191,24 @@
 (check-expect (missile-control #f #f " ") #f)
 (check-expect (missile-control
                #f (make-parameters (make-vector 27 42)
-                                   (make-vector TANKVELOCITY 0)) " ")
+                                   (make-vector TANKSPEED 0)) " ")
               (make-parameters (make-vector 27 42)
-                               (make-vector TANKVELOCITY MISSILEVELOCITY)))
+                               (make-vector TANKSPEED MISSILEVELOCITY)))
 (check-expect (missile-control
                #f (make-parameters (make-vector 27 42)
-                                   (make-vector TANKVELOCITY 0)) "left") #f)
+                                   (make-vector TANKSPEED 0)) "left") #f)
 (check-expect (missile-control
                (make-parameters (make-vector 39 222)
                                 (make-vector 0  MISSILEVELOCITY))
                (make-parameters (make-vector 27 42)
-                                (make-vector TANKVELOCITY 0)) " ")
+                                (make-vector TANKSPEED 0)) " ")
               (make-parameters (make-vector 39 222)
                                (make-vector 0 MISSILEVELOCITY)))
-  
-
-(define (insert-image weap weap-img background)  
-  ;; Weapon, Img, Img -> Img
-  ;; takes a weapon and an image for that weapon and places the
-  ;;     image into the image for the background
-  (cond
-    [(false? weap) background]
-    [else (place-image/align weap-img (vector-x (parameters-position weap))
-                             (vector-y (parameters-position weap))
-                             "center" "bottom" background)]))
-; checks
-(check-expect (insert-image (make-parameters (make-vector (/ WIDTH 2) GROUNDLEVEL)
-                                             (make-vector 0 0)) TANK BACKGROUND)
-              (place-image/align TANK (/ WIDTH 2) GROUNDLEVEL
-                                 "center" "bottom" BACKGROUND))
-(check-expect (insert-image #f TANK BACKGROUND) BACKGROUND)
 
 
 (define (move w)
   ;; Weapon -> Weapon
-  ;; add update position vector with velocity
+  ;; update position vector with velocity
   (cond
     [(false? w)  w]
     [else   (make-parameters
@@ -219,6 +242,130 @@
               (make-parameters (make-vector 12 5) (make-vector 0 0)))
 (check-expect (move (make-parameters (make-vector 0 0) (make-vector 12 5)))
               (make-parameters (make-vector 12 5) (make-vector 12 5)))
+
+
+(define (insert-image weap weap-img background)  
+  ;; Weapon, Img, Img -> Img
+  ;; takes a weapon and an image for that weapon and places the
+  ;;     image into the image for the background at the weapons x/y-position
+  (cond
+    [(false? weap) background]
+    [else (place-image/align weap-img (vector-x (parameters-position weap))
+                             (vector-y (parameters-position weap))
+                             "center" "bottom" background)]))
+; checks
+(check-expect (insert-image (make-parameters
+                             (make-vector (/ WIDTH 2) GROUNDLEVEL)
+                             (make-vector 0 0)) TANK BACKGROUND)
+              (place-image/align TANK (/ WIDTH 2) GROUNDLEVEL
+                                 "center" "bottom" BACKGROUND))
+(check-expect (insert-image #f TANK BACKGROUND) BACKGROUND)
+
+
+(define (alien-invasion? objs)
+  ;; WarObjects -> Bool
+  ;; aliens have landed!
+  (>= (vector-y (parameters-position (war-objects-invader objs)))
+      (vector-y (parameters-position (war-objects-tank objs)))))
+; checks
+(check-expect (alien-invasion?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 600)
+                                                  (make-vector 0 0))
+                                 #f)) #t)
+(check-expect (alien-invasion?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 400 300)
+                                                  (make-vector 0 0)))) #f)
+
+(define (target-eliminated? objs)
+  ;; WarObjects -> Bool
+  ;; direct hit on landing craft!
+  (cond
+    [(false? (war-objects-missile objs)) #f]
+    [(< (+ (sqr (- (vector-y (parameters-position (war-objects-missile objs)))
+                   (vector-y (parameters-position (war-objects-invader objs)))))
+           (sqr (- (vector-x (parameters-position (war-objects-missile objs)))
+                   (vector-x (parameters-position (war-objects-invader objs))))))
+        (sqr BLASTRADIUS)) #t]
+    [else #f]))
+;; checks
+(check-expect (target-eliminated?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 600)
+                                                  (make-vector 0 0))
+                                 #f)) #f)
+(check-expect (target-eliminated?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 400 300)
+                                                  (make-vector 0 0)))) #f)
+(check-expect (target-eliminated?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 110)
+                                                  (make-vector 0 0)))) #t)
+(check-expect (target-eliminated?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 690 100)
+                                                  (make-vector 0 0)))) #t)
+
+(define (misfire? objs)
+  ;; WarObjects -> Bool
+  ;; direct hit on landing craft!
+  (cond
+    [(false? (war-objects-missile objs)) #f]
+    [(< (vector-y (parameters-position (war-objects-missile objs)))
+        (vector-y (parameters-position (war-objects-invader objs)))) #t]
+    [else #f]))
+;; checks
+(check-expect (misfire?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 600)
+                                                  (make-vector 0 0))
+                                 #f)) #f)
+(check-expect (misfire?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 400 300)
+                                                  (make-vector 0 0)))) #f)
+(check-expect (misfire?
+               (make-war-objects (make-parameters (make-vector 500 600)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 700 100)
+                                                  (make-vector 0 0))
+                                 (make-parameters (make-vector 200 60)
+                                                  (make-vector 0 0)))) #t)
+
+
+(define (explosion objs)
+  ;; WarObjects -> Img
+  ;; shows game-ending explosions!
+  (cond
+    [(alien-invasion? objs)
+     (insert-image (war-objects-tank objs) DESTRUCTION (render objs))]
+    [(target-eliminated? objs)
+     (insert-image (war-objects-missile objs) DESTRUCTION
+                   (insert-image (war-objects-missile objs) HIT 
+                                 (render objs)))]
+    [(misfire? objs)
+     (insert-image (war-objects-missile objs) DESTRUCTION
+                   (render objs))]))
 
 ;; actions!
 
