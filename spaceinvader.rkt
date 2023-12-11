@@ -7,7 +7,7 @@
 
 ;; data definitions
 
-(define-struct war-objects (tank invader missile))
+(define-struct war-objects [tank invader missile])
 ;; A WarObjects is a make-war-objects [Weapon Weapon Weapon]
 ;;     a collection of war weapons and vehicles:
 ;;        includes a heroic tank, a spooky invader and a missle
@@ -30,7 +30,7 @@
     [else  (... weap ...)]))
 
 
-(define-struct parameters (position velocity))
+(define-struct parameters [position velocity])
 ;; A Parameters is a make-parameters [Vector Vector]
 ;; gives the position in pixels and velocity in pixels/tick
 ;;     of a weapon
@@ -40,7 +40,7 @@
   (... (parameters-velocity params) ...))
 
 
-(define-struct vector (x y))
+(define-struct vector [x y])
 ;; A Vector is a make-vector [Number Number]
 ;;     a mathematical object in 2D cartesian space
 #;
@@ -141,6 +141,21 @@
                                  INITINVADERPARAMS)) #t)
 
 
+(define (explosion objs)
+  ;; WarObjects -> Img
+  ;; shows game-ending explosions!
+  (cond
+    [(alien-invasion? (war-objects-tank objs) (war-objects-invader objs))
+     (insert-image (war-objects-tank objs) DESTRUCTION (render objs))]
+    [(target-eliminated? (war-objects-invader objs) (war-objects-missile objs))
+     (insert-image (war-objects-missile objs) DETONATION
+                   (insert-image (war-objects-invader objs) HIT 
+                                 (render objs)))]
+    [(misfire? (war-objects-invader objs) (war-objects-missile objs))
+     (insert-image (war-objects-missile objs) DETONATION
+                   (render objs))]))
+
+
 (define (tank-control tank ke)
   ;; Weapon, Key Event -> Weapon
   ;; send tank tank left with left arrow or right with right
@@ -217,7 +232,10 @@
                         (vector-y (parameters-velocity w))))]))
 ;; checks
 (check-expect (jitter #f) #f)
-;; how do you test a function that yields randomized output?
+(check-within (jitter (make-parameters
+                       (make-vector 0 0) (make-vector 0 0)))
+              (make-parameters (make-vector 0 0) (make-vector 0 0)) 25)
+; how do you properly test a function that yields randomized output?
 
 
 
@@ -240,7 +258,7 @@
   ;; Parameters, Paramerters -> Bool
   ;; hey man, bad shot
   (<= (vector-y (parameters-position missile))
-     (vector-y (parameters-position invader))))
+      (vector-y (parameters-position invader))))
 ;; checks
 (check-expect (misfire?
                (make-parameters (make-vector 700 100) (make-vector 0 0))
@@ -298,21 +316,6 @@
     [(false? weap) background]
     [else (place-image weap-img (vector-x (parameters-position weap))
                        (vector-y (parameters-position weap)) background)]))
-
-
-(define (explosion objs)
-  ;; WarObjects -> Img
-  ;; shows game-ending explosions!
-  (cond
-    [(alien-invasion? (war-objects-tank objs) (war-objects-invader objs))
-     (insert-image (war-objects-tank objs) DESTRUCTION (render objs))]
-    [(target-eliminated? (war-objects-invader objs) (war-objects-missile objs))
-     (insert-image (war-objects-missile objs) DETONATION
-                   (insert-image (war-objects-invader objs) HIT 
-                                 (render objs)))]
-    [(misfire? (war-objects-invader objs) (war-objects-missile objs))
-     (insert-image (war-objects-missile objs) DETONATION
-                   (render objs))]))
 
 
 
