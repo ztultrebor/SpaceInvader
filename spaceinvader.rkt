@@ -120,13 +120,12 @@
   ;; WarObjects -> Bool
   ;; ends when missile destroys invader, missile misses invader,
   ;;     or invader successfully lands
-  (cond
-    [(parameters? (war-objects-missile objs))
-     (or
-      (target-eliminated? (war-objects-invader objs) (war-objects-missile objs))
-      (misfire? (war-objects-invader objs) (war-objects-missile objs)))]
-    [(alien-invasion? (war-objects-tank objs) (war-objects-invader objs)) #t]
-    [else #f]))
+  (or (alien-invasion? (war-objects-tank objs) (war-objects-invader objs))
+      (and (parameters? (war-objects-missile objs))
+           (or
+            (target-eliminated? (war-objects-invader objs)
+                                (war-objects-missile objs))
+            (misfire? (war-objects-invader objs) (war-objects-missile objs))))))
 ; checks
 (check-expect (victory-or-defeat?
                (make-war-objects INITTANKPARAMS INITINVADERPARAMS #f)) #f)
@@ -232,11 +231,8 @@
                         (vector-y (parameters-velocity w))))]))
 ;; checks
 (check-expect (jitter #f) #f)
-(check-within (jitter (make-parameters
-                       (make-vector 0 0) (make-vector 0 0)))
-              (make-parameters (make-vector 0 0) (make-vector 0 0)) 25)
-; how do you properly test a function that yields randomized output?
-
+(check-range (vector-x (parameters-velocity (jitter (make-parameters
+                                                     (make-vector 0 0) (make-vector 0 0))))) -25 25)
 
 
 (define (target-eliminated? invader missile)
