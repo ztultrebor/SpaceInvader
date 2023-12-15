@@ -7,27 +7,25 @@
 
 ;; data definitions
 
-(define-struct war-objects [tank invader missile])
-;; A WarObjects is a make-war-objects [Weapon Weapon Weapon]
+;; A WarObjects is one of:
+;;     - '()
+;;     - (cons Parameters WarObjects)
 ;;     a collection of war weapons and vehicles:
-;;        includes a heroic tank, a spooky invader and a missle
-;;        to shoot it down
+;;        starts with a spooky invader and a heroic tank.
+;;        invader is the last (earliest) one on the list. Tank is next
+;;        can add as many missles as you like to the front of the list
+(define (war-objects? objs)
+  (or
+   (empty? objs)
+   (and (parameters? (first objs)) (war-objects? (rest objs)))))
 #;
 (define (fn-with-war-objects objs)
-  (... (war-objects-tank objs) ...)
-  (... (war-objects-invader objs) ...)
-  (... (war-objects-missile objs) ...))
-
-
-;; A Weapon is one of
-;;     - #false
-;;     - Parameters
-;; contains the kinematc parameters of the weapon if it's active, else #false
-#;
-(define (fn-with-weapon weap)
   (cond
-    [(false? weap)  ...]
-    [else  (... weap ...)]))
+    [(empty? objs) ... '()]
+    [(empty? (rest objs)) ... (cons ... (first objs) '())]
+    [(empty? (rest (rest objs))) ... (cons ... (first objs)
+                                           (fn-with-war-objects (rest objs)))]
+    [else ...(cons ... (first objs) ... (fn-with-war-objects (rest objs)))]))
 
 
 (define-struct parameters [position velocity])
@@ -60,6 +58,7 @@
                                         (make-vector 0 0)))
 (define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
                                            (make-vector 0 1)))
+(define WAROBJECTS (cons INITTANKPARAMS (cons INITINVADERPARAMS '())))
 (define MISSILEVELOCITY -10)
 (define BLASTRADIUS 75)
 (define TANKSPEED (make-vector 3 0))
@@ -87,72 +86,104 @@
     [on-key control]
     [on-tick deploy]
     [to-draw render]
-    [stop-when victory-or-defeat? explosion])) ;; be sure to show explosions
+    [stop-when victory-or-defeat? render])) ;; be sure to show explosions
 
 
 (define (control objs ke)
   ;; WarObjects -> WarObjects
   ;; move tank with left- and right-arrows, and fire missile on spacebar
-  (make-war-objects
-   (tank-control (war-objects-tank objs) ke)
-   (war-objects-invader objs)
-   (missile-control (war-objects-missile objs) (war-objects-tank objs) ke)))
+  (cond
+    [(empty? (rest objs)) objs]
+    [(key=? ke " ")
+     (cons (make-parameters
+            (parameters-position (penultimate objs))
+            (+vec (parameters-velocity (penultimate objs))
+                  (make-vector 0 MISSILEVELOCITY))) objs)]
+    [(and (empty? (rest (rest objs))) (key=? ke "left"))
+     (cons (make-parameters (parameters-position (first objs))
+                            (-vec (parameters-velocity (first objs)) TANKSPEED))
+           (rest objs))]
+    [(and (empty? (rest (rest objs))) (key=? ke "right"))
+     (cons (make-parameters (parameters-position (first objs))
+                            (+vec (parameters-velocity (first objs)) TANKSPEED))
+           (rest objs))]
+    [else (cons (first objs) (control (rest objs) ke))]))
+; checks
+(check-expect (control
+               (cons INITTANKPARAMS (cons INITINVADERPARAMS '())) "left")
+              (cons (make-parameters (parameters-position INITTANKPARAMS)
+                                     (+vec (parameters-velocity INITTANKPARAMS)
+                                           (make-vector -3 0)))
+                    (cons INITINVADERPARAMS '())))
+(check-expect (control
+               (cons INITTANKPARAMS (cons INITINVADERPARAMS '())) "right")
+              (cons (make-parameters (parameters-position INITTANKPARAMS)
+                                     (+vec (parameters-velocity INITTANKPARAMS)
+                                           (make-vector 3 0)))
+                    (cons INITINVADERPARAMS '())))
+(check-expect (control
+               (cons INITTANKPARAMS (cons INITINVADERPARAMS '())) "\r")
+              (cons INITTANKPARAMS (cons INITINVADERPARAMS '())))
+(check-expect (control
+               (cons INITTANKPARAMS (cons INITINVADERPARAMS '())) " ")
+              (cons (make-parameters (parameters-position INITTANKPARAMS)
+                                     (+vec (parameters-velocity INITTANKPARAMS)
+                                           (make-vector 0 MISSILEVELOCITY)))
+                    (cons INITTANKPARAMS (cons INITINVADERPARAMS '()))))
 
 
 (define (deploy objs)
   ;; WarObjects -> WarObjects
   ;; war objects move around in accordance with user input and hard wiring
-  (make-war-objects  (move (war-objects-tank objs))
-                     (move (jitter (war-objects-invader objs)))
-                     (move (war-objects-missile objs))))
+  (cond
+    [(empty? objs) objs]
+    [(empty? (rest objs)) (cons (move (jitter (first objs))) '())]
+    [(empty? (rest (rest objs))) (cons (move (first objs))
+                                       (deploy (rest objs)))]
+    [else (cons (move (first objs)) (deploy (rest objs)))]))
 
 
 (define (render objs)
   ;; WarObjects -> Img
   ;; display the scene with current positions of all war objects
-  (insert-image (war-objects-tank objs) TANK
-                (insert-image (war-objects-invader objs) INVADER
-                              (insert-image (war-objects-missile objs) MISSILE
-                                            BACKGROUND))))
+  (cond
+    [(empty? objs) BACKGROUND]
+    [(empty? (rest objs)) (insert-image (first objs) INVADER (render (rest objs)))]
+    [(and (empty? (rest (rest objs)))
+          (alien-invasion? (first objs) (first (rest objs))))
+     (insert-image (first objs) DESTRUCTION (render (rest objs)))]
+    [(empty? (rest (rest objs))) (insert-image (first objs)
+                                               TANK  (render (rest objs)))]
+    [(target-eliminated? (first objs) (last objs))
+     (insert-image (first objs) DETONATION
+                   (insert-image (last objs) HIT 
+                                 (render (rest objs))))]
+    [else (insert-image (first objs) MISSILE  (render (rest objs)))]))
 
 
 (define (victory-or-defeat? objs)
   ;; WarObjects -> Bool
-  ;; ends when missile destroys invader, missile misses invader,
-  ;;     or invader successfully lands
-  (or (alien-invasion? (war-objects-tank objs) (war-objects-invader objs))
-      (and (parameters? (war-objects-missile objs))
-           (or
-            (target-eliminated? (war-objects-invader objs)
-                                (war-objects-missile objs))
-            (misfire? (war-objects-invader objs) (war-objects-missile objs))))))
+  ;; ends when missile destroys invader or invader successfully lands
+  (cond
+    [(empty? (rest objs)) #f]
+    [(empty? (rest (rest objs))) (alien-invasion?
+                                  (first objs) (first (rest objs)))]
+    [(target-eliminated? (first objs) (last objs)) #t]
+    [else (victory-or-defeat? (rest objs))]))
+
 ; checks
 (check-expect (victory-or-defeat?
-               (make-war-objects INITTANKPARAMS INITINVADERPARAMS #f)) #f)
+               (cons INITTANKPARAMS (cons INITINVADERPARAMS '()))) #f)
 (check-expect (victory-or-defeat?
-               (make-war-objects INITTANKPARAMS INITINVADERPARAMS
-                                 INITTANKPARAMS)) #f)
+               (cons INITTANKPARAMS (cons INITTANKPARAMS 
+                                          (cons INITINVADERPARAMS '())))) #f)
 (check-expect (victory-or-defeat?
-               (make-war-objects INITTANKPARAMS INITINVADERPARAMS
-                                 INITINVADERPARAMS)) #t)
+               (cons INITINVADERPARAMS  (cons INITTANKPARAMS
+                                              (cons INITINVADERPARAMS '())))) #t)
 (check-expect (victory-or-defeat?
-               (make-war-objects INITINVADERPARAMS INITTANKPARAMS
-                                 INITINVADERPARAMS)) #t)
+               (cons INITINVADERPARAMS (cons INITTANKPARAMS
+                                             (cons INITINVADERPARAMS '())))) #t)
 
-
-(define (explosion objs)
-  ;; WarObjects -> Img
-  ;; shows game-ending explosions!
-  (cond
-    [(alien-invasion? (war-objects-tank objs) (war-objects-invader objs))
-     (insert-image (war-objects-tank objs) DESTRUCTION (render objs))]
-    [(target-eliminated? (war-objects-invader objs) (war-objects-missile objs))
-     (insert-image (war-objects-missile objs) DETONATION
-                   (insert-image (war-objects-invader objs) HIT 
-                                 (render objs)))]
-    [(misfire? (war-objects-invader objs) (war-objects-missile objs))
-     (insert-image (war-objects-missile objs) DETONATION
-                   (render objs))]))
 
 
 (define (tank-control tank ke)
@@ -209,28 +240,22 @@
 (define (move w)
   ;; Weapon -> Weapon
   ;; update position vector with velocity
-  (cond
-    [(false? w)  w]
-    [else   (make-parameters
-             (+vec (parameters-position w) (parameters-velocity w))
-             (parameters-velocity w))]))
+  (make-parameters
+   (+vec (parameters-position w) (parameters-velocity w))
+   (parameters-velocity w)))
 ;; checks
-(check-expect (move #f) #f)
 (check-expect (move (make-parameters (make-vector 12 5) (make-vector 12 5)))
               (make-parameters (make-vector 24 10) (make-vector 12 5)))
 
 
-(define (jitter w)
+(define (jitter invader)
   ;; Weapon -> Weapon
   ;; update velocity vector with some randomness
-  (cond
-    [(false? w)  #f]
-    [else (make-parameters
-           (parameters-position w)
-           (make-vector (+ (random 51) -25)
-                        (vector-y (parameters-velocity w))))]))
+  (make-parameters
+   (parameters-position invader)
+   (make-vector (+ (random 51) -25)
+                (vector-y (parameters-velocity invader)))))
 ;; checks
-(check-expect (jitter #f) #f)
 (check-range (vector-x (parameters-velocity (jitter (make-parameters
                                                      (make-vector 0 0) (make-vector 0 0))))) -25 25)
 
@@ -304,6 +329,29 @@
 (check-expect (normalize (make-vector 30 40 )) 50)
 
 
+
+;; WarObjects -> Parameters
+;; returns parameters for the last object in the list, the invader
+(define (last objs)
+  (cond
+    [(empty? (rest objs)) (first objs)]
+    [else (last (rest objs))]))
+; check
+(check-expect (last (cons "a" '())) "a")
+(check-expect (last (cons "b" (cons "a" '()))) "a")
+
+
+;; WarObjects -> Parameters
+;; returns parameters for the last object in the list, the invader
+(define (penultimate objs)
+  (cond
+    [(empty? (rest (rest objs))) (first objs)]
+    [else (penultimate (rest objs))]))
+; check
+(check-expect (penultimate (cons "b" (cons "a" '()))) "b")
+(check-expect (penultimate (cons "c" (cons "b" (cons "a" '())))) "b")
+
+
 (define (insert-image weap weap-img background)  
   ;; Weapon, Img, Img -> Img
   ;; takes a weapon and an image for that weapon and places the
@@ -317,4 +365,4 @@
 
 ;; actions!
 
-(main (make-war-objects INITTANKPARAMS INITINVADERPARAMS #f))
+(main WAROBJECTS)
