@@ -155,13 +155,12 @@
 (define (victory-or-defeat? objs)
   ;; WarObjects -> Bool
   ;; ends when missile destroys invader or invader successfully lands
-  (cond
-    [(empty? (rest objs)) #f]
-    [(empty? (rest (rest objs))) (alien-invasion?
-                                  (first objs) (first (rest objs)))]
-    [(target-eliminated? (first objs) (last objs)) #t]
-    [else (victory-or-defeat? (rest objs))]))
-
+  (and
+   (not (empty? (rest (rest objs))))
+   (or
+    (alien-invasion? (penultimate objs) (last objs))
+    (target-eliminated? (first objs) (last objs))
+    (victory-or-defeat? (rest objs)))))
 ; checks
 (check-expect (victory-or-defeat?
                (cons INITTANKPARAMS (cons INITINVADERPARAMS '()))) #f)
@@ -229,8 +228,9 @@
    (make-vector (+ (random 51) -25)
                 (vector-y (parameters-velocity invader)))))
 ;; checks
-(check-range (vector-x (parameters-velocity (jitter (make-parameters
-                                                     (make-vector 0 0) (make-vector 0 0))))) -25 25)
+(check-range (vector-x (parameters-velocity
+                        (jitter (make-parameters
+                                 (make-vector 0 0) (make-vector 0 0))))) -25 25)
 
 
 (define (target-eliminated? invader missile)
@@ -246,20 +246,6 @@
 (check-expect (target-eliminated?
                INITTANKPARAMS
                (make-parameters (make-vector 700 100) (make-vector 0 0))) #f)
-
-
-(define (misfire? invader missile)
-  ;; Parameters, Paramerters -> Bool
-  ;; hey man, bad shot
-  (<= (vector-y (parameters-position missile))
-      (vector-y (parameters-position invader))))
-;; checks
-(check-expect (misfire?
-               (make-parameters (make-vector 700 100) (make-vector 0 0))
-               (make-parameters (make-vector 400 300) (make-vector 0 0))) #f)
-(check-expect (misfire?
-               (make-parameters (make-vector 700 100) (make-vector 0 0))
-               (make-parameters (make-vector 400 100) (make-vector 0 0))) #t)
 
 
 (define (alien-invasion? tank invader)
