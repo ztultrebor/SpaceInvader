@@ -78,6 +78,7 @@
 (define HIT (radial-star 12 50 100 "solid" "green"))
 
 
+
 ; functions
 
 (define (main objs)
@@ -94,9 +95,9 @@
   ;; WarObjects -> WarObjects
   ;; move tank with left- and right-arrows, and fire missile on spacebar
   (cond
-    [(empty? (rest objs)) objs]
     [(key=? ke " ")
      (cons (fire-missile (penultimate objs)) objs)]
+    [(empty? (rest objs)) objs]
     [(empty? (rest (rest objs)))
      (cons (tank-control (first objs) ke) (rest objs))]
     [else (cons (first objs) (control (rest objs) ke))]))
@@ -132,7 +133,9 @@
     [(empty? (rest objs)) (cons (move (jitter (first objs))) '())]
     [(empty? (rest (rest objs))) (cons (move (first objs))
                                        (deploy (rest objs)))]
-    [else (cons (move (first objs)) (deploy (rest objs)))]))
+    [(> (vector-y (parameters-position (first objs))) 0)
+     (cons (move (first objs)) (deploy (rest objs)))]
+    [else (deploy (rest objs))]))
 
 
 (define (render objs)
@@ -173,9 +176,6 @@
 (check-expect (victory-or-defeat?
                (cons INITINVADERPARAMS (cons INITTANKPARAMS
                                              (cons INITINVADERPARAMS '())))) #t)
-(check-expect (victory-or-defeat?
-               (cons INITINVADERPARAMS (cons INITTANKPARAMS
-                                             (cons INITINVADERPARAMS '())))) #t)
 
 
 (define (tank-control tank ke)
@@ -189,15 +189,16 @@
      [else (parameters-velocity tank)])))
 ;; checks
 (check-expect (tank-control
-               (make-parameters (make-vector 0 0) (make-vector 0 0)) "left")
-              (make-parameters (make-vector 0 0)
-                               (-vec (make-vector 0 0) TANKSPEED)))
+               INITTANKPARAMS "left")
+              (make-parameters
+               (parameters-position INITTANKPARAMS)
+               (-vec (parameters-velocity INITTANKPARAMS) TANKSPEED)))
 (check-expect (tank-control
-               (make-parameters (make-vector 0 0) (make-vector 0 0)) "right")
-              (make-parameters (make-vector 0 0) TANKSPEED))
-(check-expect (tank-control
-               (make-parameters (make-vector 0 0) (make-vector 0 0)) " ")
-              (make-parameters (make-vector 0 0) (make-vector 0 0)))
+               INITTANKPARAMS "right")
+              (make-parameters
+               (parameters-position INITTANKPARAMS)
+               (+vec (parameters-velocity INITTANKPARAMS) TANKSPEED)))
+(check-expect (tank-control INITTANKPARAMS "p") INITTANKPARAMS)
 
 
 (define (fire-missile tank)
@@ -244,7 +245,7 @@
      BLASTRADIUS))
 ;; checks
 (check-expect (target-eliminated? INITINVADERPARAMS INITINVADERPARAMS) #t)
-(check-expect (target-eliminated? INITINVADERPARAMS INITTANKPARAMS) #f)
+(check-expect (target-eliminated? INITTANKPARAMS INITINVADERPARAMS) #f)
 
 
 (define (alien-invasion? tank invader)
@@ -287,10 +288,9 @@
 (check-expect (normalize (make-vector 30 40 )) 50)
 
 
-
-;; WarObjects -> Parameters
-;; returns parameters for the last object in the list, the invader
 (define (last objs)
+  ;; WarObjects -> Parameters
+  ;; returns parameters for the last object in the list, the invader
   (cond
     [(empty? (rest objs)) (first objs)]
     [else (last (rest objs))]))
@@ -299,9 +299,9 @@
 (check-expect (last (cons "b" (cons "a" '()))) "a")
 
 
-;; WarObjects -> Parameters
-;; returns parameters for the last object in the list, the invader
 (define (penultimate objs)
+  ;; WarObjects -> Parameters
+  ;; returns parameters for the last object in the list, the invader
   (cond
     [(empty? (rest (rest objs))) (first objs)]
     [else (penultimate (rest objs))]))
