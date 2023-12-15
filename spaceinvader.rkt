@@ -97,7 +97,6 @@
   (cond
     [(key=? ke " ")
      (cons (fire-missile (penultimate objs)) objs)]
-    [(empty? (rest objs)) objs]
     [(empty? (rest (rest objs)))
      (cons (tank-control (first objs) ke) (rest objs))]
     [else (cons (first objs) (control (rest objs) ke))]))
@@ -129,7 +128,6 @@
   ;; WarObjects -> WarObjects
   ;; war objects move around in accordance with user input and hard wiring
   (cond
-    [(empty? objs) objs]
     [(empty? (rest objs)) (cons (move (jitter (first objs))) '())]
     [(empty? (rest (rest objs))) (cons (move (first objs))
                                        (deploy (rest objs)))]
