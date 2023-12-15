@@ -59,7 +59,7 @@
 (define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
                                            (make-vector 0 1)))
 (define WAROBJECTS (cons INITTANKPARAMS (cons INITINVADERPARAMS '())))
-(define MISSILEVELOCITY -10)
+(define MISSILEVELOCITY (make-vector 0 -10))
 (define BLASTRADIUS 75)
 (define TANKSPEED (make-vector 3 0))
 (define BACKGROUND
@@ -95,18 +95,9 @@
   (cond
     [(empty? (rest objs)) objs]
     [(key=? ke " ")
-     (cons (make-parameters
-            (parameters-position (penultimate objs))
-            (+vec (parameters-velocity (penultimate objs))
-                  (make-vector 0 MISSILEVELOCITY))) objs)]
-    [(and (empty? (rest (rest objs))) (key=? ke "left"))
-     (cons (make-parameters (parameters-position (first objs))
-                            (-vec (parameters-velocity (first objs)) TANKSPEED))
-           (rest objs))]
-    [(and (empty? (rest (rest objs))) (key=? ke "right"))
-     (cons (make-parameters (parameters-position (first objs))
-                            (+vec (parameters-velocity (first objs)) TANKSPEED))
-           (rest objs))]
+     (cons (fire-missile (penultimate objs)) objs)]
+    [(empty? (rest (rest objs)))
+     (cons (tank-control (first objs) ke) (rest objs))]
     [else (cons (first objs) (control (rest objs) ke))]))
 ; checks
 (check-expect (control
@@ -128,7 +119,7 @@
                (cons INITTANKPARAMS (cons INITINVADERPARAMS '())) " ")
               (cons (make-parameters (parameters-position INITTANKPARAMS)
                                      (+vec (parameters-velocity INITTANKPARAMS)
-                                           (make-vector 0 MISSILEVELOCITY)))
+                                           MISSILEVELOCITY))
                     (cons INITTANKPARAMS (cons INITINVADERPARAMS '()))))
 
 
@@ -178,25 +169,22 @@
                (cons INITTANKPARAMS (cons INITTANKPARAMS 
                                           (cons INITINVADERPARAMS '())))) #f)
 (check-expect (victory-or-defeat?
-               (cons INITINVADERPARAMS  (cons INITTANKPARAMS
-                                              (cons INITINVADERPARAMS '())))) #t)
+               (cons INITINVADERPARAMS (cons INITTANKPARAMS
+                                             (cons INITINVADERPARAMS '())))) #t)
 (check-expect (victory-or-defeat?
                (cons INITINVADERPARAMS (cons INITTANKPARAMS
                                              (cons INITINVADERPARAMS '())))) #t)
 
 
-
 (define (tank-control tank ke)
-  ;; Weapon, Key Event -> Weapon
-  ;; send tank tank left with left arrow or right with right
-  (cond
-    [(key=? "left" ke) (make-parameters
-                        (parameters-position tank)
-                        (-vec (parameters-velocity tank) TANKSPEED))]
-    [(key=? "right" ke) (make-parameters
-                         (parameters-position tank)
-                         (+vec (parameters-velocity tank) TANKSPEED))]
-    [else tank]))
+  ;; Parameters, Key Event -> Parameters
+  ;; send tank left with left arrow or right with right
+  (make-parameters
+   (parameters-position tank)
+   (cond
+     [(key=? ke "left") (-vec (parameters-velocity tank) TANKSPEED)]
+     [(key=? ke "right") (+vec (parameters-velocity tank) TANKSPEED)]
+     [else (parameters-velocity tank)])))
 ;; checks
 (check-expect (tank-control
                (make-parameters (make-vector 0 0) (make-vector 0 0)) "left")
@@ -210,31 +198,16 @@
               (make-parameters (make-vector 0 0) (make-vector 0 0)))
 
 
-(define (missile-control missile tank ke)
-  ;; Weapon, Weapon, Key Event -> Weapon
-  ;; fire missile on spacebar; missile takes x-position anf velocity of tank
-  (cond
-    [(and (false? missile) (key=? " " ke))
-     (make-parameters (parameters-position tank)
-                      (make-vector (vector-x (parameters-velocity tank))
-                                   MISSILEVELOCITY))]
-    [else missile]))
+(define (fire-missile tank)
+  ;; WeaponObjects -> Parameters
+  ;; fire missile on spacebar; missile takes x-position and velocity of tank
+  (make-parameters (parameters-position tank)
+                   (+vec (parameters-velocity tank) MISSILEVELOCITY)))
 ;; checks
-(check-expect (missile-control
-               #f (make-parameters (make-vector 27 42)
-                                   (make-vector TANKSPEED 0)) " ")
+(check-expect (fire-missile
+               (make-parameters (make-vector 27 42) TANKSPEED))
               (make-parameters (make-vector 27 42)
-                               (make-vector TANKSPEED MISSILEVELOCITY)))
-(check-expect (missile-control
-               #f (make-parameters (make-vector 27 42)
-                                   (make-vector TANKSPEED 0)) "left") #f)
-(check-expect (missile-control
-               (make-parameters (make-vector 39 222)
-                                (make-vector 0  MISSILEVELOCITY))
-               (make-parameters (make-vector 27 42)
-                                (make-vector TANKSPEED 0)) " ")
-              (make-parameters (make-vector 39 222)
-                               (make-vector 0 MISSILEVELOCITY)))
+                               (+vec TANKSPEED MISSILEVELOCITY)))
 
 
 (define (move w)
@@ -356,10 +329,8 @@
   ;; Weapon, Img, Img -> Img
   ;; takes a weapon and an image for that weapon and places the
   ;;     image into the image for the background at the weapons x/y-position
-  (cond
-    [(false? weap) background]
-    [else (place-image weap-img (vector-x (parameters-position weap))
-                       (vector-y (parameters-position weap)) background)]))
+  (place-image weap-img (vector-x (parameters-position weap))
+               (vector-y (parameters-position weap)) background))
 
 
 
