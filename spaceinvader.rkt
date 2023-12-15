@@ -62,6 +62,7 @@
 (define MISSILEVELOCITY (make-vector 0 -10))
 (define BLASTRADIUS 75)
 (define TANKSPEED (make-vector 3 0))
+
 (define BACKGROUND
   (overlay/align "left" "bottom"
                  (rectangle WIDTH ALTITUDE "solid" "light green")
@@ -139,12 +140,12 @@
   ;; display the scene with current positions of all war objects
   (cond
     [(empty? objs) BACKGROUND]
-    [(empty? (rest objs)) (insert-image (first objs) INVADER (render (rest objs)))]
-    [(and (empty? (rest (rest objs)))
-          (alien-invasion? (first objs) (first (rest objs))))
-     (insert-image (first objs) DESTRUCTION (render (rest objs)))]
-    [(empty? (rest (rest objs))) (insert-image (first objs)
-                                               TANK  (render (rest objs)))]
+    [(empty? (rest objs)) (insert-image (first objs) INVADER
+                                        (render (rest objs)))]
+    [(empty? (rest (rest objs)))
+     (insert-image (first objs)
+                   (if (alien-invasion? (first objs) (first (rest objs)))
+                       DESTRUCTION TANK) (render (rest objs)))]
     [(target-eliminated? (first objs) (last objs))
      (insert-image (first objs) DETONATION
                    (insert-image (last objs) HIT 
@@ -156,7 +157,7 @@
   ;; WarObjects -> Bool
   ;; ends when missile destroys invader or invader successfully lands
   (and
-   (not (empty? (rest (rest objs))))
+   (not (empty? (rest objs)))
    (or
     (alien-invasion? (penultimate objs) (last objs))
     (target-eliminated? (first objs) (last objs))
@@ -164,6 +165,8 @@
 ; checks
 (check-expect (victory-or-defeat?
                (cons INITTANKPARAMS (cons INITINVADERPARAMS '()))) #f)
+(check-expect (victory-or-defeat?
+               (cons INITINVADERPARAMS (cons INITTANKPARAMS '()))) #t)
 (check-expect (victory-or-defeat?
                (cons INITTANKPARAMS (cons INITTANKPARAMS 
                                           (cons INITINVADERPARAMS '())))) #f)
@@ -233,19 +236,15 @@
                                  (make-vector 0 0) (make-vector 0 0))))) -25 25)
 
 
-(define (target-eliminated? invader missile)
+(define (target-eliminated? missile invader)
   ;; Parameters, Parameters -> Bool
   ;; direct hit on landing craft!
   (< (normalize (-vec (parameters-position invader)
                       (parameters-position missile)))
      BLASTRADIUS))
 ;; checks
-(check-expect (target-eliminated?
-               INITTANKPARAMS
-               (make-parameters (make-vector 700 600) (make-vector 0 0))) #t)
-(check-expect (target-eliminated?
-               INITTANKPARAMS
-               (make-parameters (make-vector 700 100) (make-vector 0 0))) #f)
+(check-expect (target-eliminated? INITINVADERPARAMS INITINVADERPARAMS) #t)
+(check-expect (target-eliminated? INITINVADERPARAMS INITTANKPARAMS) #f)
 
 
 (define (alien-invasion? tank invader)
