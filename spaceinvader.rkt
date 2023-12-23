@@ -7,9 +7,12 @@
 
 ;; data definitions
 
-(define-struct war-objects [tank invaders missiles explosions])
+;; !!! implement cooldown for shootin'
+;; !!! pac-man-ifiy edges
+
+(define-struct war-objects [tank invaders missiles explosions cooldown])
 ;; A WarObjects is a [Parameters ListOfParameters
-;; ListOfParameters ListOfParameters]
+;; ListOfParameters ListOfParameters Number]
 ;; A single tank, a swarm of invaders, a hail of missiles and
 ;; hopefully, lots of enemies exploding
 #;
@@ -64,6 +67,8 @@
 (define MISSILEVELOCITY (make-vector 0 -10))
 (define BLASTRADIUS 75)
 (define TANKSPEED (make-vector 3 0))
+(define NUMINVADERS 20)
+(define COOLDOWN 28)
 (define BACKGROUND
   (overlay/align "left" "bottom"
                  (rectangle WIDTH ALTITUDE "solid" "light green")
@@ -77,13 +82,13 @@
 (define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
 (define DETONATION (radial-star 8 20 50 "solid" "red"))
 (define HIT (overlay
-               (radial-star 20 32 48 "solid" "purple")
-               (radial-star 10 48 72 "solid" "green")))
+             (radial-star 20 32 48 "solid" "purple")
+             (radial-star 10 48 72 "solid" "green")))
 (define GAMEOVERTEXTCOLOR "white")
-(define NUMINVADERS 20)
+
 (define WAROBJECTS (make-war-objects
                     INITTANKPARAMS
-                    (make-list NUMINVADERS INITINVADERPARAMS) '() '()))
+                    (make-list NUMINVADERS INITINVADERPARAMS) '() '() 0))
 
 
 
@@ -111,9 +116,10 @@
    (move-stuff (delete-misses (hit (war-objects-missiles objs)
                                    (war-objects-invaders objs))))
    (move-stuff (delete-misses (append
-                                (war-objects-explosions objs)
+                               (war-objects-explosions objs)
                                (detonation (war-objects-missiles objs)
-                                          (war-objects-invaders objs)))))))
+                                           (war-objects-invaders objs)))))
+   (max (sub1 (war-objects-cooldown objs)) 0)))
 
 
 (define (delete-misses lop)
@@ -130,49 +136,51 @@
   ;; WarObjects -> WarObjects
   ;; move tank with left- and right-arrows, and fire missile on spacebar
   (cond
-    [(key=? ke " ")
+    [(and (key=? ke " ") (= (war-objects-cooldown objs) 0))
      (make-war-objects
       (war-objects-tank objs)
       (war-objects-invaders objs)
       (cons (fire-missile (war-objects-tank objs))
             (war-objects-missiles objs))
-      (war-objects-explosions objs))]
+      (war-objects-explosions objs)
+      COOLDOWN)]
     [else (make-war-objects
            (tank-control (war-objects-tank objs) ke)
            (war-objects-invaders objs)
            (war-objects-missiles objs)
-           (war-objects-explosions objs))]))
+           (war-objects-explosions objs)
+           (war-objects-cooldown objs))]))
 ; checks
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '()) "left")
+                                 (list INITINVADERPARAMS) '() '() 0) "left")
               (make-war-objects
                (make-parameters (parameters-position INITTANKPARAMS)
                                 (+vec (parameters-velocity INITTANKPARAMS)
                                       (make-vector -3 0)))
-               (list INITINVADERPARAMS) '() '()))
+               (list INITINVADERPARAMS) '() '() 0))
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '()) "right")
+                                 (list INITINVADERPARAMS) '() '() 0) "right")
               (make-war-objects
                (make-parameters (parameters-position INITTANKPARAMS)
                                 (+vec (parameters-velocity INITTANKPARAMS)
                                       (make-vector 3 0)))
-               (list INITINVADERPARAMS) '() '()))
+               (list INITINVADERPARAMS) '() '() 0))
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '()) "\r")
+                                 (list INITINVADERPARAMS) '() '() 0) "\r")
               (make-war-objects
-               INITTANKPARAMS (list INITINVADERPARAMS) '() '()))
+               INITTANKPARAMS (list INITINVADERPARAMS) '() '() 0))
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '()) " ")
+                                 (list INITINVADERPARAMS) '() '() 0) " ")
               (make-war-objects
                INITTANKPARAMS (list INITINVADERPARAMS)
                (list (make-parameters
                       (parameters-position INITTANKPARAMS)
                       (+vec (parameters-velocity INITTANKPARAMS)
-                            MISSILEVELOCITY))) '()))
+                            MISSILEVELOCITY))) '() COOLDOWN))
 
 
 (define (render objs)
@@ -199,17 +207,17 @@
 ; checks
 (check-expect (victory-or-defeat?
                (make-war-objects
-                INITTANKPARAMS (list INITINVADERPARAMS) '() '())) #f)
+                INITTANKPARAMS (list INITINVADERPARAMS) '() '() 0)) #f)
 (check-expect (victory-or-defeat?
                (make-war-objects
-                INITINVADERPARAMS (list INITTANKPARAMS) '() '())) #t)
+                INITINVADERPARAMS (list INITTANKPARAMS) '() '() 0)) #t)
 (check-expect (victory-or-defeat?
                (make-war-objects
                 INITTANKPARAMS (list INITINVADERPARAMS)
-                (list INITTANKPARAMS) '())) #f)
+                (list INITTANKPARAMS) '() 0)) #f)
 (check-expect (victory-or-defeat?
                (make-war-objects INITINVADERPARAMS (list INITTANKPARAMS)
-                                 (list INITINVADERPARAMS) '())) #t)
+                                 (list INITINVADERPARAMS) '() 0)) #t)
 
 
 (define (render-game-over objs)
