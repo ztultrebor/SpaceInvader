@@ -11,7 +11,7 @@
 ;; A WarObjects is a [Parameters ListOfParameters
 ;; ListOfParameters ListOfParameters]
 ;; A single tank, a swarm of invaders, a hail of missiles and
-;; hopefully, lots of missiles detonating
+;; hopefully, lots of enemies exploding
 #;
 (define (fn-with-war-objects objs)
   (make-war-objects
@@ -78,7 +78,7 @@
 (define DETONATION (radial-star 8 20 50 "solid" "red"))
 (define HIT (radial-star 12 50 100 "solid" "green"))
 (define GAMEOVERTEXTCOLOR "white")
-(define NUMINVADERS 2)
+(define NUMINVADERS 10)
 (define WAROBJECTS (make-war-objects
                     INITTANKPARAMS
                     (make-list NUMINVADERS INITINVADERPARAMS) '() '()))
@@ -99,8 +99,6 @@
 
 (define (deploy objs)
   ;; !!! wrap around pacman style
-  ;; !!! add multiple invaders
-  ;; !!! delete missiles the exitb stage top
   ;; WarObjects -> WarObjects
   ;; war objects move around in accordance with user input and hard wiring
   (make-war-objects
@@ -110,12 +108,14 @@
                               (war-objects-missiles objs))))
    (move-stuff (delete-misses (hit (war-objects-missiles objs)
                                    (war-objects-invaders objs))))
-   (detonation (war-objects-missiles objs)
-               (war-objects-invaders objs))))
+   (move-stuff (delete-misses (append
+                                (war-objects-explosions objs)
+                               (detonation (war-objects-missiles objs)
+                                          (war-objects-invaders objs)))))))
 
 
 (define (delete-misses lop)
-  ;; LiastOfParameters -> ListOfParametrs
+  ;; ListOfParameters -> ListOfParametrs
   ;; delete missiles that exit stage top
   (cond
     [(empty? lop) '()]
@@ -179,7 +179,7 @@
   ;; !!! invader expolsions!
   ;; !!! tank explosion
   (render-list-of-stuff
-   (war-objects-explosions objs) DETONATION
+   (war-objects-explosions objs) HIT
    (render-list-of-stuff
     (war-objects-missiles objs) MISSILE
     (render-list-of-stuff
@@ -217,15 +217,18 @@
    (above
     (text "Game Over!" 48 GAMEOVERTEXTCOLOR)
     (beside
-     (text "you destroyed  " 16 GAMEOVERTEXTCOLOR)
-     (text (number->string 1) 24 GAMEOVERTEXTCOLOR)
+     (text "you destroyed "  16 GAMEOVERTEXTCOLOR)
+     (text (number->string (- NUMINVADERS
+                              (length (war-objects-invaders objs))))
+           24 GAMEOVERTEXTCOLOR)
      (text " invaders" 16 GAMEOVERTEXTCOLOR)))
    (render objs)))
   
 
 (define (hit swarm1 swarm2)
   ;; ListOfParameters ListOfParameter -> ListOfParameters
-  ;; delete parameters of missile that has exploded
+  ;; delete parameters of an element of swarm1 that has
+  ;; made contact with an element of swarm1
   (cond
     [(empty? swarm1) '()]
     [(contact? (first swarm1) swarm2)
@@ -241,22 +244,6 @@
     [(contact? (first missiles) invaders)
      (cons (first missiles) (detonation (rest missiles) invaders))]
     [else (detonation (rest missiles) invaders)]))
-
-
-(define (elimination missiles invaders)
-  ;; ListOfParameters Parameter -> ListOfParameters
-  ;; move parameters of detonated missile to explosion list
-  (cond
-    [(empty? missiles) '()]
-    [(empty? invaders) '()]
-    [(< (normalize (-vec (parameters-position (first invaders))
-                         (parameters-position (first missiles))))
-        BLASTRADIUS)
-     (append (hit (rest missiles) (first invaders))
-             (hit (rest missiles) (rest invaders)))]
-    [else (cons (first invaders)
-                (append (hit (rest missiles) (first invaders))
-                        (hit (rest missiles) (rest invaders))))]))
 
 
 (define (move params)
@@ -362,22 +349,6 @@
                         (parameters-position (first swarm))))
        BLASTRADIUS)
     (contact? loner (rest swarm)))))
-
-
-(define (target-eliminated? swarm1 swarm2)
-  ;; Parameters, Parameters -> Bool
-  ;; determine if there's contact between any member
-  ;; of swarm1 and any member of swarm2
-  (and
-   (not (empty? swarm1))
-   (or
-    (contact? (first swarm1) swarm2)
-    (target-eliminated? (rest swarm1) swarm2))))
-;; checks
-(check-expect (target-eliminated? (list INITINVADERPARAMS)
-                                  (list INITINVADERPARAMS)) #t)
-(check-expect (target-eliminated? (list INITINVADERPARAMS)
-                                  (list INITTANKPARAMS)) #f)
 
 
 (define (alien-invasion? tank invaders)
