@@ -76,9 +76,11 @@
 (define MISSILE (rectangle 16 40 "solid" "red"))
 (define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
 (define DETONATION (radial-star 8 20 50 "solid" "red"))
-(define HIT (radial-star 12 50 100 "solid" "green"))
+(define HIT (overlay
+               (radial-star 20 32 48 "solid" "purple")
+               (radial-star 10 48 72 "solid" "green")))
 (define GAMEOVERTEXTCOLOR "white")
-(define NUMINVADERS 10)
+(define NUMINVADERS 20)
 (define WAROBJECTS (make-war-objects
                     INITTANKPARAMS
                     (make-list NUMINVADERS INITINVADERPARAMS) '() '()))
