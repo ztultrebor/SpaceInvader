@@ -7,9 +7,6 @@
 
 ;; data definitions
 
-;; !!! implement cooldown for shootin'
-;; !!! pac-man-ifiy edges
-
 (define-struct war-objects [tank invaders missiles explosions cooldown])
 ;; A WarObjects is a [Parameters ListOfParameters
 ;; ListOfParameters ListOfParameters Number]
@@ -82,10 +79,9 @@
 (define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
 (define DETONATION (radial-star 8 20 50 "solid" "red"))
 (define HIT (overlay
-             (radial-star 20 32 48 "solid" "purple")
-             (radial-star 10 48 72 "solid" "green")))
+             (radial-star 20 12 48 "solid" "white")
+             (radial-star 10 32 72 "solid" "light purple")))
 (define GAMEOVERTEXTCOLOR "white")
-
 (define WAROBJECTS (make-war-objects
                     INITTANKPARAMS
                     (make-list NUMINVADERS INITINVADERPARAMS) '() '() 0))
@@ -119,7 +115,7 @@
                                (war-objects-explosions objs)
                                (detonation (war-objects-missiles objs)
                                            (war-objects-invaders objs)))))
-   (max (sub1 (war-objects-cooldown objs)) 0)))
+   (sub1 (war-objects-cooldown objs))))
 
 
 (define (delete-misses lop)
@@ -136,7 +132,7 @@
   ;; WarObjects -> WarObjects
   ;; move tank with left- and right-arrows, and fire missile on spacebar
   (cond
-    [(and (key=? ke " ") (= (war-objects-cooldown objs) 0))
+    [(and (key=? ke " ") (<= (war-objects-cooldown objs) 0))
      (make-war-objects
       (war-objects-tank objs)
       (war-objects-invaders objs)
@@ -260,7 +256,7 @@
   ;; Parameters -> Parameters
   ;; update position vector with velocity
   (make-parameters
-   (+vec (parameters-position params) (parameters-velocity params))
+   (+vec-w/modulo (parameters-position params) (parameters-velocity params))
    (parameters-velocity params)))
 ;; checks
 (check-expect (move (make-parameters (make-vector 12 5) (make-vector 12 5)))
@@ -348,6 +344,21 @@
 ;; checks
 (check-expect (-vec (make-vector 12 5) (make-vector 12 5)) (make-vector 0 0))
 
+
+
+
+(define (+vec-w/modulo v1 v2)
+  ;; Vector, Vector -> Vector
+  ;; add one vector to another
+  (make-vector (modulo (+ (vector-x v1) (vector-x v2)) WIDTH)
+               (+ (vector-y v1) (vector-y v2))))
+;; checks
+(check-expect (+vec-w/modulo (make-vector 12 5) (make-vector 12 5))
+              (make-vector 24 10))
+(check-expect (+vec-w/modulo (make-vector WIDTH 5) (make-vector 12 5))
+              (make-vector 12 10))
+(check-expect (+vec-w/modulo (make-vector 0 5) (make-vector -12 5))
+              (make-vector (- WIDTH 12) 10))
 
 (define (contact? loner swarm)
   ;; Parameter, Parameters -> Bool
