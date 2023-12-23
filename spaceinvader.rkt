@@ -61,12 +61,9 @@
                                         (make-vector 0 0)))
 (define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
                                            (make-vector 0 1)))
-(define WAROBJECTS (make-war-objects
-                    INITTANKPARAMS (list INITINVADERPARAMS) '() '()))
 (define MISSILEVELOCITY (make-vector 0 -10))
 (define BLASTRADIUS 75)
 (define TANKSPEED (make-vector 3 0))
-
 (define BACKGROUND
   (overlay/align "left" "bottom"
                  (rectangle WIDTH ALTITUDE "solid" "light green")
@@ -81,6 +78,10 @@
 (define DETONATION (radial-star 8 20 50 "solid" "red"))
 (define HIT (radial-star 12 50 100 "solid" "green"))
 (define GAMEOVERTEXTCOLOR "white")
+(define NUMINVADERS 2)
+(define WAROBJECTS (make-war-objects
+                    INITTANKPARAMS
+                    (make-list NUMINVADERS INITINVADERPARAMS) '() '()))
 
 
 
@@ -102,22 +103,15 @@
   ;; !!! delete missiles the exitb stage top
   ;; WarObjects -> WarObjects
   ;; war objects move around in accordance with user input and hard wiring
-  (cond
-    [(target-eliminated? (war-objects-missiles objs)
-                         (first (war-objects-invaders objs)))
-     (make-war-objects
-      (move (war-objects-tank objs))
-      '()
-      (move-stuff (hit (war-objects-missiles objs)
-                       (first (war-objects-invaders objs))))
-      (detonation (war-objects-missiles objs)
-                  (first (war-objects-invaders objs))))]
-    [else
-     (make-war-objects
-      (move (war-objects-tank objs))
-      (move-stuff (jitter-stuff (war-objects-invaders objs)))
-      (move-stuff (delete-misses (war-objects-missiles objs)))
-      (war-objects-explosions objs))]))
+  (make-war-objects
+   (move (war-objects-tank objs))
+   (move-stuff (jitter-stuff (hit
+                              (war-objects-invaders objs)
+                              (war-objects-missiles objs))))
+   (move-stuff (delete-misses (hit (war-objects-missiles objs)
+                                   (war-objects-invaders objs))))
+   (detonation (war-objects-missiles objs)
+               (war-objects-invaders objs))))
 
 
 (define (delete-misses lop)
@@ -229,28 +223,40 @@
    (render objs)))
   
 
-(define (hit missiles invader)
-  ;; ListOfParameters Parameter -> ListOfParameters
+(define (hit swarm1 swarm2)
+  ;; ListOfParameters ListOfParameter -> ListOfParameters
   ;; delete parameters of missile that has exploded
   (cond
-    [(empty? missiles) '()]
-    [(< (normalize (-vec (parameters-position invader)
-                         (parameters-position (first missiles))))
-        BLASTRADIUS)
-     (hit (rest missiles) invader)]
-    [else (cons (first missiles) (hit (rest missiles) invader))]))
+    [(empty? swarm1) '()]
+    [(contact? (first swarm1) swarm2)
+     (hit (rest swarm1) swarm2)]
+    [else (cons (first swarm1) (hit (rest swarm1) swarm2))]))
 
 
-(define (detonation missiles invader)
+(define (detonation missiles invaders)
   ;; ListOfParameters Parameter -> ListOfParameters
   ;; move parameters of detonated missile to explosion list
   (cond
     [(empty? missiles) '()]
-    [(< (normalize (-vec (parameters-position invader)
+    [(contact? (first missiles) invaders)
+     (cons (first missiles) (detonation (rest missiles) invaders))]
+    [else (detonation (rest missiles) invaders)]))
+
+
+(define (elimination missiles invaders)
+  ;; ListOfParameters Parameter -> ListOfParameters
+  ;; move parameters of detonated missile to explosion list
+  (cond
+    [(empty? missiles) '()]
+    [(empty? invaders) '()]
+    [(< (normalize (-vec (parameters-position (first invaders))
                          (parameters-position (first missiles))))
         BLASTRADIUS)
-     (cons (first missiles) (detonation (rest missiles) invader))]
-    [else (detonation (rest missiles) invader)]))
+     (append (hit (rest missiles) (first invaders))
+             (hit (rest missiles) (rest invaders)))]
+    [else (cons (first invaders)
+                (append (hit (rest missiles) (first invaders))
+                        (hit (rest missiles) (rest invaders))))]))
 
 
 (define (move params)
@@ -346,21 +352,32 @@
 (check-expect (-vec (make-vector 12 5) (make-vector 12 5)) (make-vector 0 0))
 
 
-(define (target-eliminated? missiles invader)
-  ;; Parameters, Parameters -> Bool
-  ;; direct hit on landing craft!
+(define (contact? loner swarm)
+  ;; Parameter, Parameters -> Bool
+  ;; if contact between loner and any element of swarm, return #t
   (and
-   (not (empty? missiles))
+   (not (empty? swarm))
    (or
-    (< (normalize (-vec (parameters-position invader)
-                        (parameters-position (first missiles))))
+    (< (normalize (-vec (parameters-position loner)
+                        (parameters-position (first swarm))))
        BLASTRADIUS)
-    (target-eliminated? (rest missiles) invader))))
+    (contact? loner (rest swarm)))))
+
+
+(define (target-eliminated? swarm1 swarm2)
+  ;; Parameters, Parameters -> Bool
+  ;; determine if there's contact between any member
+  ;; of swarm1 and any member of swarm2
+  (and
+   (not (empty? swarm1))
+   (or
+    (contact? (first swarm1) swarm2)
+    (target-eliminated? (rest swarm1) swarm2))))
 ;; checks
 (check-expect (target-eliminated? (list INITINVADERPARAMS)
-                                  INITINVADERPARAMS) #t)
+                                  (list INITINVADERPARAMS)) #t)
 (check-expect (target-eliminated? (list INITINVADERPARAMS)
-                                  INITTANKPARAMS) #f)
+                                  (list INITTANKPARAMS)) #f)
 
 
 (define (alien-invasion? tank invaders)
@@ -389,7 +406,7 @@
 
 (define (render-list-of-stuff loprms img bkgd)
   ; ListOfParameters Img -> Img
-  ; render the snake on the background provided
+  ; render a list of objects as the given image onto the given background
   (cond
     [(empty? loprms) bkgd]
     [else (place-image img
