@@ -26,6 +26,7 @@
 (define INVADER (overlay (circle 20 "solid" "green")
                          (rectangle 80 20 "solid" "green")))
 (define MISSILE (rectangle 16 40 "solid" "red"))
+(define BOMB (circle 10 "solid" "green"))
 (define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
 (define DETONATION (radial-star 8 20 50 "solid" "red"))
 (define HIT (overlay
@@ -35,27 +36,29 @@
 
 
 ; =============================
-;; data definitions
+; data definitions
 
 ; !!! add bombs dropped by invaders
 
-(define-struct war-objects [tank invaders missiles explosions cooldown])
-;; A WarObjects is a [Parameters [ListOf Parameter]
-;; [ListOf Parameters] [ListOf Parameters] Number]
-;; A single tank, a swarm of invaders, a hail of missiles and
-;; hopefully, lots of enemies exploding
+(define-struct war-objects [tank invaders missiles bombs explosions cooldown])
+; A WarObjects is a [Parameters [ListOf Parameters]
+; [ListOf Parameters] [ListOf Parameters] [ListOf Parameters] Number]
+; A single tank, a swarm of scary invaders, a hail of missiles,
+; a cannonade of enemy fire and hopefully, lots of enemies exploding
+; also has a cooldown for player's shooting
 #;
 (define (fn-with-war-objects objs)
   (make-war-objects
    (fn-with-tank (war-objects-tank objs))
    (fn-with-invaders (war-objects-invaders objs))
    (fn-with-missiles (war-objects-missiles objs)))
+  (fn-with-bombs (war-objects-bombs objs))
   (fn-with-explosions (war-objects-explosions objs)))
 
 
-;; A [ListOf Parameters] is one of
-;;   - '()
-;;   (cons Parameters [ListOf Parameters])
+; A [ListOf Parameters] is one of
+;   - '()
+;   (cons Parameters [ListOf Parameters])
 #;
 (define (fn-with-lop lop)
   (cond
@@ -64,9 +67,9 @@
 
 
 (define-struct parameters [position velocity])
-;; A Parameters is a make-parameters [Vector Vector]
-;; gives the position in pixels and velocity in pixels/tick
-;;     of a weapon
+; A Parameters is a make-parameters [Vector Vector]
+; gives the position in pixels and velocity in pixels/tick
+;     of a weapon
 #;
 (define (fn-with-parameters params)
   (... (parameters-position params) ...)
@@ -74,8 +77,8 @@
 
 
 (define-struct vector [x y])
-;; A Vector is a make-vector [Number Number]
-;;     a mathematical object in 2D cartesian space
+; A Vector is a make-vector [Number Number]
+;     a mathematical object in 2D cartesian space
 #;
 (define (fn-with-vector vec)
   (... (vector-x vec) ...)
@@ -86,8 +89,8 @@
 ; functions
 
 (define (main objs)
-  ;; WarObjects -> WarObjects
-  ;; run the pocket universe
+  ; WarObjects -> WarObjects
+  ; run the pocket universe
   (big-bang objs
     [on-tick deploy]
     [on-key control]
@@ -96,19 +99,20 @@
 
 
 (define (deploy objs)
-  ;; WarObjects -> WarObjects
-  ;; war objects move around in accordance with user input and hard wiring
+  ; WarObjects -> WarObjects
+  ; war objects move around in accordance with user input and hard wiring
   (make-war-objects
    (move (war-objects-tank objs))
    (move-invaders objs)
    (move-missiles objs)
+   (move-bombs objs)
    (move-explosions objs)
    (sub1 (war-objects-cooldown objs))))
 
 
 (define (control objs ke)
-  ;; WarObjects -> WarObjects
-  ;; move tank with left- and right-arrows, and fire missile on spacebar
+  ; WarObjects -> WarObjects
+  ; move tank with left- and right-arrows, and fire missile on spacebar
   (cond
     [(and (key=? ke " ") (<= (war-objects-cooldown objs) 0))
      (make-war-objects
@@ -116,86 +120,91 @@
       (war-objects-invaders objs)
       (cons (fire-missile (war-objects-tank objs))
             (war-objects-missiles objs))
+      (war-objects-bombs objs)
       (war-objects-explosions objs)
       COOLDOWN)]
     [else (make-war-objects
            (tank-control (war-objects-tank objs) ke)
            (war-objects-invaders objs)
            (war-objects-missiles objs)
+           (war-objects-bombs objs)
            (war-objects-explosions objs)
            (war-objects-cooldown objs))]))
 ; checks
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '() 0) "left")
+                                 (list INITINVADERPARAMS) '() '() '() 0) "left")
               (make-war-objects
                (make-parameters (parameters-position INITTANKPARAMS)
                                 (+vec (parameters-velocity INITTANKPARAMS)
                                       (make-vector -3 0)))
-               (list INITINVADERPARAMS) '() '() 0))
+               (list INITINVADERPARAMS) '() '() '() 0))
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '() 0) "right")
+                                 (list INITINVADERPARAMS) '() '() '() 0) "right")
               (make-war-objects
                (make-parameters (parameters-position INITTANKPARAMS)
                                 (+vec (parameters-velocity INITTANKPARAMS)
                                       (make-vector 3 0)))
-               (list INITINVADERPARAMS) '() '() 0))
+               (list INITINVADERPARAMS) '() '() '() 0))
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '() 0) "\r")
+                                 (list INITINVADERPARAMS) '() '() '() 0) "\r")
               (make-war-objects
-               INITTANKPARAMS (list INITINVADERPARAMS) '() '() 0))
+               INITTANKPARAMS (list INITINVADERPARAMS) '() '() '() 0))
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '() 0) " ")
+                                 (list INITINVADERPARAMS) '() '() '() 0) " ")
               (make-war-objects
                INITTANKPARAMS (list INITINVADERPARAMS)
                (list (make-parameters
                       (parameters-position INITTANKPARAMS)
                       (+vec (parameters-velocity INITTANKPARAMS)
-                            MISSILEVELOCITY))) '() COOLDOWN))
+                            MISSILEVELOCITY))) '() '() COOLDOWN))
 
 
 (define (render objs)
-  ;; WarObjects -> Img
-  ;; display the scene with current positions of all war objects
-  ;; !!! tank explosion
+  ; WarObjects -> Img
+  ; display the scene with current positions of all war objects
+  ; !!! tank explosion
   (render-list-of-stuff
    (war-objects-explosions objs) HIT
    (render-list-of-stuff
-    (war-objects-missiles objs) MISSILE
+    (war-objects-explosions objs) BOMB
     (render-list-of-stuff
-     (war-objects-invaders objs) INVADER
+     (war-objects-missiles objs) MISSILE
      (render-list-of-stuff
-      (list (war-objects-tank objs)) TANK BACKGROUND)))))
+      (war-objects-invaders objs) INVADER
+      (render-list-of-stuff
+       (list (war-objects-tank objs)) TANK BACKGROUND))))))
 
 
+; !!! tank destroyed by bomb?
 (define (victory-or-defeat? objs)
-  ;; WarObjects -> Bool
-  ;; ends when all invaders are destroyed or one invader successfully lands
+  ; WarObjects -> Bool
+  ; ends when all invaders are destroyed or one invader successfully lands
   (or
    (empty? (war-objects-invaders objs))
    (alien-invasion? (war-objects-tank objs) (war-objects-invaders objs))))
 ; checks
 (check-expect (victory-or-defeat?
                (make-war-objects
-                INITTANKPARAMS (list INITINVADERPARAMS) '() '() 0)) #f)
+                INITTANKPARAMS (list INITINVADERPARAMS) '() '() '() 0)) #f)
 (check-expect (victory-or-defeat?
                (make-war-objects
-                INITINVADERPARAMS (list INITTANKPARAMS) '() '() 0)) #t)
+                INITINVADERPARAMS (list INITTANKPARAMS) '() '() '() 0)) #t)
 (check-expect (victory-or-defeat?
                (make-war-objects
                 INITTANKPARAMS (list INITINVADERPARAMS)
-                (list INITTANKPARAMS) '() 0)) #f)
+                (list INITTANKPARAMS) '() '() 0)) #f)
 (check-expect (victory-or-defeat?
                (make-war-objects INITINVADERPARAMS (list INITTANKPARAMS)
-                                 (list INITINVADERPARAMS) '() 0)) #t)
+                                 (list INITINVADERPARAMS) '() '() 0)) #t)
 
 
 (define (render-game-over objs)
-  ;; WarObjects -> Img
-  ;; display game over screen
+  ; WarObjects -> Img
+  ; display game over screen
   (overlay
    (above
     (text "Game Over!" 48 GAMEOVERTEXTCOLOR)
@@ -209,8 +218,8 @@
 
 
 (define (move object)
-  ;; Parameters -> Parameters
-  ;; update position vector with velocity
+  ; Parameters -> Parameters
+  ; update position vector with velocity
   (make-parameters
    (vec-modulo (parameters-position object) (parameters-velocity object))
    (parameters-velocity object)))
@@ -243,6 +252,13 @@
           (define in-play (delete-misses dry-powder)))
     ; - IN -
     (move-stuff in-play)))
+
+
+(define (move-bombs objs)
+  ; WarObjects -> [ListOf Parameters]
+  ; delete exploded bombs, delete those that leave screen
+  ; and move the rest purposefully downward
+  (war-objects-bombs objs))
 
 
 (define (move-explosions objs)
@@ -281,8 +297,8 @@
 
 
 (define (rise explosions)
-  ;; [ListOf Parameters] -> [ListOf Parameters]
-  ;; move parameters of detonated missile to explosion list
+  ; [ListOf Parameters] -> [ListOf Parameters]
+  ; move parameters of detonated missile to explosion list
   (local (
           (define (flip-velo pars)
             (make-parameters
@@ -292,10 +308,10 @@
 
 
 (define (second-order-filter fmap fpred subj-lst obj-lst)
-; [[Parameters Parameters -> Boolean] [ListOf Parameters] -> Boolean]
+  ; [[Parameters Parameters -> Boolean] [ListOf Parameters] -> Boolean]
   ; [Parameters Parameters -> Boolean] [ListOf Parameters]
   ; [ListOf Parameters] -> [ListOf Parameters]
-  ; abstract function that enables a filtration that requires
+  ;;; abstract function that enables a filtration that requires
   ; recursion over two lists
   (filter (lambda (i)
             (fmap (lambda (j)
@@ -304,25 +320,25 @@
 
 
 (define (cull-missile-hits swarm1 swarm2)
-  ;; [ListOf Parameters] [ListOf Parameter] -> [ListOf Parameters]
-  ;; delete parameters of an element of swarm1 that has
-  ;; made contact with an element of swarm2
+  ; [ListOf Parameters] [ListOf Parameter] -> [ListOf Parameters]
+  ; delete parameters of an element of swarm1 that has
+  ; made contact with an element of swarm2
   (second-order-filter andmap avoid-flak? swarm1 swarm2))
 
 
 (define (detonation swarm1 swarm2)
-  ;; [ListOf Parameters] [ListOf Parameters] -> [ListOf Parameters]
-  ;; move parameters of detonated missile to explosion list
+  ; [ListOf Parameters] [ListOf Parameters] -> [ListOf Parameters]
+  ; move parameters of detonated missile to explosion list
   (local (
           (define (smack-flak? i j)
             (not (avoid-flak? i j))))
     ; - IN -
-  (second-order-filter ormap smack-flak? swarm1 swarm2)))
+    (second-order-filter ormap smack-flak? swarm1 swarm2)))
 
 
 (define (delete-misses lop)
-  ;; [ListOf Parameters] -> [ListOf Parameters]
-  ;; delete missiles and fireballs that exit stage top
+  ; [ListOf Parameters] -> [ListOf Parameters]
+  ; delete missiles and fireballs that exit stage top
   (local (
           (define (overshot? p)
             (< 0 (vector-y (parameters-position p)) HEIGHT)))
@@ -331,8 +347,8 @@
           
 
 (define (alien-invasion? tank invaders)
-  ;; Paramerters, Parameters -> Bool
-  ;; aliens have landed! (maybe)
+  ; Paramerters, Parameters -> Bool
+  ; aliens have landed! (maybe)
   (and
    (not (empty? invaders))
    (or
@@ -347,11 +363,11 @@
 
 
 (define (fire-missile tank)
-  ;; WeaponObjects -> Parameters
-  ;; fire missile on spacebar; missile takes x-position and velocity of tank
+  ; WeaponObjects -> Parameters
+  ; fire missile on spacebar; missile takes x-position and velocity of tank
   (make-parameters (parameters-position tank)
                    (+vec (parameters-velocity tank) MISSILEVELOCITY)))
-;; checks
+; checks
 (check-expect (fire-missile
                (make-parameters (make-vector 27 42) TANKSPEED))
               (make-parameters (make-vector 27 42)
@@ -359,15 +375,15 @@
 
 
 (define (tank-control tank ke)
-  ;; Parameters, Key Event -> Parameters
-  ;; send tank left with left arrow or right with right
+  ; Parameters, Key Event -> Parameters
+  ; send tank left with left arrow or right with right
   (make-parameters
    (parameters-position tank)
    (cond
      [(key=? ke "left") (-vec (parameters-velocity tank) TANKSPEED)]
      [(key=? ke "right") (+vec (parameters-velocity tank) TANKSPEED)]
      [else (parameters-velocity tank)])))
-;; checks
+; checks
 (check-expect (tank-control
                INITTANKPARAMS "left")
               (make-parameters
@@ -382,8 +398,8 @@
 
 
 (define (avoid-flak? obj1 obj2)
-  ;; Parameter, Parameters -> Bool
-  ;; if distance between obj1 and obj2 is greater than radius, return #t
+  ; Parameter, Parameters -> Bool
+  ; if distance between obj1 and obj2 is greater than radius, return #t
   (local (
           (define delta-p (-vec (parameters-position obj1)
                                 (parameters-position obj2)))
@@ -394,36 +410,36 @@
 
 (define (vector-arithmetic op v1 v2)
   ; [Number Number -> Number] Vector Vector -> Vector
-  ; abstract function for vector arithmetic
+  ;;; abstract function for vector arithmetic
   (make-vector (op (vector-x v1) (vector-x v2))
                (op (vector-y v1) (vector-y v2))))
 
 
 (define (+vec v1 v2)
-  ;; Vector, Vector -> Vector
-  ;; add one vector to another
+  ; Vector, Vector -> Vector
+  ; add one vector to another
   (vector-arithmetic + v1 v2))
-;; checks
+; checks
 (check-expect (+vec (make-vector 12 5) (make-vector 12 5)) (make-vector 24 10))
 
 
 (define (-vec v1 v2)
-  ;; Vector, Vector -> Vector
-  ;; subtract one vector from another
+  ; Vector, Vector -> Vector
+  ; subtract one vector from another
   (vector-arithmetic - v1 v2))
-;; checks
+; checks
 (check-expect (-vec (make-vector 12 5) (make-vector 12 5)) (make-vector 0 0))
 
 
 (define (vec-modulo v1 v2)
-  ;; Vector, Vector -> Vector
-  ;; add one vector to another
+  ; Vector, Vector -> Vector
+  ; add one vector to another
   (local (
           (define (mod x y)
             (modulo (+ x y) WIDTH)))
     ; -IN -
     (vector-arithmetic mod v1 v2)))
-;; checks
+; checks
 (check-expect (vec-modulo (make-vector 12 5) (make-vector 12 5))
               (make-vector 24 10))
 (check-expect (vec-modulo (make-vector WIDTH 5) (make-vector 12 5))
@@ -433,10 +449,10 @@
 
 
 (define (normalize vec)
-  ;; Vector -> Vector
-  ;; calculates norm of a vector
+  ; Vector -> Vector
+  ; calculates norm of a vector
   (sqrt (+ (sqr (vector-x vec)) (sqr (vector-y vec)))))
-;; checks
+; checks
 (check-expect (normalize (make-vector 30 40 )) 50)
 
 
@@ -452,7 +468,7 @@
 
 
 ; ===========================
-;; actions!
+; actions!
 
 (define INITTANKPARAMS (make-parameters (make-vector (/ WIDTH 2) GROUNDLEVEL)
                                         (make-vector 0 0)))
@@ -462,6 +478,6 @@
 (define TANKSPEED (make-vector 3 0))
 (define WAROBJECTS (make-war-objects
                     INITTANKPARAMS
-                    (make-list NUMINVADERS INITINVADERPARAMS) '() '() 0))
+                    (make-list NUMINVADERS INITINVADERPARAMS) '() '() '() 0))
 
 (main WAROBJECTS)
