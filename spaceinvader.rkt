@@ -1,15 +1,47 @@
 ;; The first three lines of this file were inserted by DrRacket. They record metadata
 ;; about the language level of this file in a form that our tools can easily process.
-#reader(lib "htdp-beginner-reader.ss" "lang")((modname spaceinvader) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+#reader(lib "htdp-intermediate-lambda-reader.ss" "lang")((modname spaceinvader) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
 (require 2htdp/image)
 (require 2htdp/universe)
 
 
+; ===============================
+; constants
+
+(define WIDTH 1400)
+(define HEIGHT 750)
+(define ALTITUDE 100)
+(define GROUNDLEVEL (- HEIGHT ALTITUDE))
+
+(define BLASTRADIUS 75)
+
+(define NUMINVADERS 100)
+(define COOLDOWN 14)
+(define BACKGROUND
+  (overlay/align "left" "bottom"
+                 (rectangle WIDTH ALTITUDE "solid" "light green")
+                 (empty-scene WIDTH HEIGHT "midnight blue")))
+(define TANK (overlay/align "center" "bottom"
+                            (rectangle 50 20 "solid" "red")
+                            (rectangle 20 50 "solid" "red")))
+(define INVADER (overlay (circle 20 "solid" "green")
+                         (rectangle 80 20 "solid" "green")))
+(define MISSILE (rectangle 16 40 "solid" "red"))
+(define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
+(define DETONATION (radial-star 8 20 50 "solid" "red"))
+(define HIT (overlay
+             (radial-star 20 12 48 "solid" "white")
+             (radial-star 10 32 72 "solid" "light purple")))
+(define GAMEOVERTEXTCOLOR "white")
+
+
+
+; =============================
 ;; data definitions
 
 (define-struct war-objects [tank invaders missiles explosions cooldown])
-;; A WarObjects is a [Parameters ListOfParameters
-;; ListOfParameters ListOfParameters Number]
+;; A WarObjects is a [Parameters [ListOf Parameter]
+;; [ListOf Parameters] [ListOf Parameters] Number]
 ;; A single tank, a swarm of invaders, a hail of missiles and
 ;; hopefully, lots of enemies exploding
 #;
@@ -21,9 +53,9 @@
   (fn-with-explosions (war-objects-explosions objs)))
 
 
-;; A ListOfParameters is one of
+;; A [ListOf Parameters] is one of
 ;;   - '()
-;;   (cons Parameters ListOfParameters)
+;;   (cons Parameters [ListOf Parameters])
 #;
 (define (fn-with-lop lop)
   (cond
@@ -51,43 +83,6 @@
 
 
 
-; constants
-
-(define WIDTH 1400)
-(define HEIGHT 750)
-(define ALTITUDE 100)
-(define GROUNDLEVEL (- HEIGHT ALTITUDE))
-(define INITTANKPARAMS (make-parameters (make-vector (/ WIDTH 2) GROUNDLEVEL)
-                                        (make-vector 0 0)))
-(define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
-                                           (make-vector 0 1)))
-(define MISSILEVELOCITY (make-vector 0 -10))
-(define BLASTRADIUS 75)
-(define TANKSPEED (make-vector 3 0))
-(define NUMINVADERS 20)
-(define COOLDOWN 28)
-(define BACKGROUND
-  (overlay/align "left" "bottom"
-                 (rectangle WIDTH ALTITUDE "solid" "light green")
-                 (empty-scene WIDTH HEIGHT "midnight blue")))
-(define TANK (overlay/align "center" "bottom"
-                            (rectangle 50 20 "solid" "red")
-                            (rectangle 20 50 "solid" "red")))
-(define INVADER (overlay (circle 20 "solid" "green")
-                         (rectangle 80 20 "solid" "green")))
-(define MISSILE (rectangle 16 40 "solid" "red"))
-(define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
-(define DETONATION (radial-star 8 20 50 "solid" "red"))
-(define HIT (overlay
-             (radial-star 20 12 48 "solid" "white")
-             (radial-star 10 32 72 "solid" "light purple")))
-(define GAMEOVERTEXTCOLOR "white")
-(define WAROBJECTS (make-war-objects
-                    INITTANKPARAMS
-                    (make-list NUMINVADERS INITINVADERPARAMS) '() '() 0))
-
-
-
 ; functions
 
 (define (main objs)
@@ -101,31 +96,25 @@
 
 
 (define (deploy objs)
-  ;; !!! wrap around pacman style
   ;; WarObjects -> WarObjects
   ;; war objects move around in accordance with user input and hard wiring
   (make-war-objects
+   ; tank
    (move (war-objects-tank objs))
-   (move-stuff (jitter-stuff (hit
-                              (war-objects-invaders objs)
-                              (war-objects-missiles objs))))
+   ; invaders
+   (move-stuff (jitter (hit
+                        (war-objects-invaders objs)
+                        (war-objects-missiles objs))))
+   ; missiles
    (move-stuff (delete-misses (hit (war-objects-missiles objs)
-                                   (war-objects-invaders objs))))
+                                   (war-objects-invaders objs)
+                                   )))
+   ; explosions
    (move-stuff (delete-misses (append
                                (war-objects-explosions objs)
-                               (detonation (war-objects-missiles objs)
-                                           (war-objects-invaders objs)))))
+                               (rise (detonation (war-objects-invaders objs)
+                                                 (war-objects-missiles objs))))))
    (sub1 (war-objects-cooldown objs))))
-
-
-(define (delete-misses lop)
-  ;; ListOfParameters -> ListOfParametrs
-  ;; delete missiles that exit stage top
-  (cond
-    [(empty? lop) '()]
-    [(< (vector-y (parameters-position (first lop))) 0)
-     (delete-misses (rest lop))]
-    [else (cons (first lop) (delete-misses (rest lop)))]))
 
 
 (define (control objs ke)
@@ -182,7 +171,6 @@
 (define (render objs)
   ;; WarObjects -> Img
   ;; display the scene with current positions of all war objects
-  ;; !!! invader expolsions!
   ;; !!! tank explosion
   (render-list-of-stuff
    (war-objects-explosions objs) HIT
@@ -229,27 +217,6 @@
            24 GAMEOVERTEXTCOLOR)
      (text " invaders" 16 GAMEOVERTEXTCOLOR)))
    (render objs)))
-  
-
-(define (hit swarm1 swarm2)
-  ;; ListOfParameters ListOfParameter -> ListOfParameters
-  ;; delete parameters of an element of swarm1 that has
-  ;; made contact with an element of swarm1
-  (cond
-    [(empty? swarm1) '()]
-    [(contact? (first swarm1) swarm2)
-     (hit (rest swarm1) swarm2)]
-    [else (cons (first swarm1) (hit (rest swarm1) swarm2))]))
-
-
-(define (detonation missiles invaders)
-  ;; ListOfParameters Parameter -> ListOfParameters
-  ;; move parameters of detonated missile to explosion list
-  (cond
-    [(empty? missiles) '()]
-    [(contact? (first missiles) invaders)
-     (cons (first missiles) (detonation (rest missiles) invaders))]
-    [else (detonation (rest missiles) invaders)]))
 
 
 (define (move params)
@@ -264,32 +231,89 @@
 
 
 (define (move-stuff loprms)
-  ; ListOfParameters  -> ListOfParameters
+  ; [ListOf Parameters]  -> [ListOf Parameters]
   ; update parameters that are organized into lists
-  (cond
-    [(empty? loprms) '()]
-    [else (cons (move (first loprms)) (move-stuff (rest loprms)))]))
+  (map move loprms))
 
 
-(define (jitter-stuff loprms)
-  ; ListOfParameters  -> ListOfParameters
-  ; apply jitter to a list of parameters
-  (cond
-    [(empty? loprms) '()]
-    [else (cons (jitter (first loprms)) (jitter-stuff (rest loprms)))]))
+(define (jitter invaders)
+  ; [ListOf Parameters] -> [ListOf Parameters]
+  ; jitter a group of invaders
+  (local (
+          (define (jitter invader)
+            (make-parameters
+             (parameters-position invader)
+             (make-vector (+ (random 51) -25)
+                          (vector-y (parameters-velocity invader))))))
+    ; - IN -
+    (map jitter invaders)))
 
 
-(define (jitter invader)
-  ;; Weapon -> Weapon
-  ;; update velocity vector with some randomness
-  (make-parameters
-   (parameters-position invader)
-   (make-vector (+ (random 51) -25)
-                (vector-y (parameters-velocity invader)))))
-;; checks
-(check-range (vector-x (parameters-velocity
-                        (jitter (make-parameters
-                                 (make-vector 0 0) (make-vector 0 0))))) -25 25)
+(define (hit swarm1 swarm2)
+  ;; [ListOf Parameters] [ListOf Parameter] -> [ListOf Parameters]
+  ;; delete parameters of an element of swarm1 that has
+  ;; made contact with an element of swarm2
+  (filter (lambda (i)
+            (andmap (lambda (j)
+                      (avoid-flak? i j))
+                    swarm2)) swarm1))
+
+
+(define (rise explosions)
+  ;; [ListOf Parameters] -> [ListOf Parameters]
+  ;; move parameters of detonated missile to explosion list
+  (local (
+          (define (flip-velo pars)
+            (make-parameters
+             (parameters-position pars)
+             (+vec (parameters-velocity pars) MISSILEVELOCITY))))  
+    (map flip-velo explosions)))
+
+
+(define (detonation swarm1 swarm2)
+  ;; [ListOf Parameters] [ListOf Parameters] -> [ListOf Parameters]
+  ;; move parameters of detonated missile to explosion list
+  (filter (lambda (i)
+            (ormap (lambda (j)
+                     (not (avoid-flak? i j)))
+                   swarm2)) swarm1))
+
+
+(define (delete-misses lop)
+  ;; [ListOf Parameters] -> [ListOf Parameters]
+  ;; delete missiles and fireballs that exit stage top
+  (local (
+          (define (overshot? p)
+            (> (vector-y (parameters-position p)) 0)))
+    ; - IN -
+    (filter overshot? lop)))
+
+
+(define (avoid-flak? obj1 obj2)
+  ;; Parameter, Parameters -> Bool
+  ;; if distance between obj1 and obj2 is greater than radius, return #t
+  (local (
+          (define delta-p (-vec (parameters-position obj1)
+                                (parameters-position obj2)))
+          (define dist (normalize delta-p)))
+    ; - IN-
+    (> dist BLASTRADIUS)))
+          
+
+(define (alien-invasion? tank invaders)
+  ;; Paramerters, Parameters -> Bool
+  ;; aliens have landed! (maybe)
+  (and
+   (not (empty? invaders))
+   (or
+    (>= (vector-y (parameters-position (first invaders)))
+        (vector-y (parameters-position tank)))
+    (alien-invasion? tank (rest invaders)))))
+; checks
+(check-expect (alien-invasion?
+               INITTANKPARAMS (list INITINVADERPARAMS)) #f)
+(check-expect (alien-invasion?
+               INITTANKPARAMS (list INITTANKPARAMS)) #t)
 
 
 (define (fire-missile tank)
@@ -345,8 +369,6 @@
 (check-expect (-vec (make-vector 12 5) (make-vector 12 5)) (make-vector 0 0))
 
 
-
-
 (define (+vec-w/modulo v1 v2)
   ;; Vector, Vector -> Vector
   ;; add one vector to another
@@ -359,33 +381,6 @@
               (make-vector 12 10))
 (check-expect (+vec-w/modulo (make-vector 0 5) (make-vector -12 5))
               (make-vector (- WIDTH 12) 10))
-
-(define (contact? loner swarm)
-  ;; Parameter, Parameters -> Bool
-  ;; if contact between loner and any element of swarm, return #t
-  (and
-   (not (empty? swarm))
-   (or
-    (< (normalize (-vec (parameters-position loner)
-                        (parameters-position (first swarm))))
-       BLASTRADIUS)
-    (contact? loner (rest swarm)))))
-
-
-(define (alien-invasion? tank invaders)
-  ;; Paramerters, Parameters -> Bool
-  ;; aliens have landed! (maybe)
-  (and
-   (not (empty? invaders))
-   (or
-    (>= (vector-y (parameters-position (first invaders)))
-        (vector-y (parameters-position tank)))
-    (alien-invasion? tank (rest invaders)))))
-; checks
-(check-expect (alien-invasion?
-               INITTANKPARAMS (list INITINVADERPARAMS)) #f)
-(check-expect (alien-invasion?
-               INITTANKPARAMS (list INITTANKPARAMS)) #t)
 
 
 (define (normalize vec)
@@ -407,7 +402,17 @@
                        (render-list-of-stuff (rest loprms) img bkgd))]))
 
 
-
+; ===========================
 ;; actions!
+
+(define INITTANKPARAMS (make-parameters (make-vector (/ WIDTH 2) GROUNDLEVEL)
+                                        (make-vector 0 0)))
+(define INITINVADERPARAMS (make-parameters (make-vector (/ WIDTH 2) 50)
+                                           (make-vector 0 1)))
+(define MISSILEVELOCITY (make-vector 0 -10))
+(define TANKSPEED (make-vector 3 0))
+(define WAROBJECTS (make-war-objects
+                    INITTANKPARAMS
+                    (make-list NUMINVADERS INITINVADERPARAMS) '() '() 0))
 
 (main WAROBJECTS)
