@@ -395,9 +395,9 @@
   ; [ListOf Unit] [ListOf Unit] -> [ListOf Unit]
   ; release bombs when invader cooldown reaches zero
   (local (
-          (define bombers (filter
-                           (lambda (x) (< (unit-cooldown x) 0))
-                           invaders))
+          (define (fire-when-ready inv)
+            (< (unit-cooldown inv) 0))
+          (define bombers (filter fire-when-ready invaders))
           (define (make-bomb-unit b)
             (make-unit (unit-position b)
                        (+vec (unit-velocity b) (make-vector 0 10)) 0)))
@@ -422,10 +422,21 @@
   ; [ListOf Unit] -> [ListOf Unit]
   ;;; abstract function that enables a filtration that requires
   ; recursion over two lists
-  (filter (lambda (i)
-            (fmap (lambda (j)
-                    (fpred i j))
-                  obj-lst)) subj-lst))
+  (filter (lambda (i) (fmap (lambda (j) (fpred i j)) obj-lst)) subj-lst))
+; This lambdized version is equivalent to the following. The inner function
+; must be defined inside the scope of the outer function in order to access
+; the variable i--which exists only in the scope of the outer function--
+; without taking it as an argument
+  #;
+  (local (
+          (define (outer-func1 i)
+            (local (
+                    (define (inner-func j)
+                      (fpred i j)))
+              ; - IN -
+              (fmap inner-func obj-lst))))
+    ; - IN -
+    (filter outer-func1 subj-lst))
 
 
 (define (cull-missile-hits swarm1 swarm2)
