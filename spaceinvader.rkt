@@ -214,7 +214,7 @@
   ;; Parameters -> Parameters
   ;; update position vector with velocity
   (make-parameters
-   (+vec-w/modulo (parameters-position object) (parameters-velocity object))
+   (vec-modulo (parameters-position object) (parameters-velocity object))
    (parameters-velocity object)))
 ; checks
 (check-expect (move (make-parameters (make-vector 12 5) (make-vector 12 5)))
@@ -248,19 +248,19 @@
 
 
 (define (move-explosions objs)
-; WarObjects -> [ListOf Parameters]
-; conver destroved invaders into fireballs, propel them upward,
-; delete those outside field of play and move the rest purposefully upward
-(local (
-        (define explosions (war-objects-explosions objs))
-        (define invaders (war-objects-invaders objs))
-        (define missiles (war-objects-missiles objs))
-        (define fresh-explosions (detonation invaders missiles))
-        (define rising-fireballs (rise fresh-explosions))
-        (define remaining-faders (delete-misses explosions))
-        (define total-carnage (append remaining-faders rising-fireballs)))
-  ; -IN -
-   (move-stuff  total-carnage)))
+  ; WarObjects -> [ListOf Parameters]
+  ; conver destroved invaders into fireballs, propel them upward,
+  ; delete those outside field of play and move the rest purposefully upward
+  (local (
+          (define explosions (war-objects-explosions objs))
+          (define invaders (war-objects-invaders objs))
+          (define missiles (war-objects-missiles objs))
+          (define fresh-explosions (detonation invaders missiles))
+          (define rising-fireballs (rise fresh-explosions))
+          (define remaining-faders (delete-misses explosions))
+          (define total-carnage (append remaining-faders rising-fireballs)))
+    ; -IN -
+    (move-stuff  total-carnage)))
                                
 
 (define (move-stuff loprms)
@@ -319,7 +319,7 @@
   ;; delete missiles and fireballs that exit stage top
   (local (
           (define (overshot? p)
-            (> (vector-y (parameters-position p)) 0)))
+            (< 0 (vector-y (parameters-position p)) HEIGHT)))
     ; - IN -
     (filter overshot? lop)))
           
@@ -386,13 +386,17 @@
     (> dist BLASTRADIUS)))
 
 
-; !!! abstract vector arithmetic function
+(define (vector-arithmetic op v1 v2)
+  ; [Number Number -> Number] Vector Vector -> Vector
+  ; abstract function for vector arithmetic
+  (make-vector (op (vector-x v1) (vector-x v2))
+               (op (vector-y v1) (vector-y v2))))
+
 
 (define (+vec v1 v2)
   ;; Vector, Vector -> Vector
   ;; add one vector to another
-  (make-vector (+ (vector-x v1) (vector-x v2))
-               (+ (vector-y v1) (vector-y v2))))
+  (vector-arithmetic + v1 v2))
 ;; checks
 (check-expect (+vec (make-vector 12 5) (make-vector 12 5)) (make-vector 24 10))
 
@@ -400,23 +404,25 @@
 (define (-vec v1 v2)
   ;; Vector, Vector -> Vector
   ;; subtract one vector from another
-  (make-vector (- (vector-x v1) (vector-x v2))
-               (- (vector-y v1) (vector-y v2))))
+  (vector-arithmetic - v1 v2))
 ;; checks
 (check-expect (-vec (make-vector 12 5) (make-vector 12 5)) (make-vector 0 0))
 
 
-(define (+vec-w/modulo v1 v2)
+(define (vec-modulo v1 v2)
   ;; Vector, Vector -> Vector
   ;; add one vector to another
-  (make-vector (modulo (+ (vector-x v1) (vector-x v2)) WIDTH)
-               (+ (vector-y v1) (vector-y v2))))
+  (local (
+          (define (mod x y)
+            (modulo (+ x y) WIDTH)))
+    ; -IN -
+    (vector-arithmetic mod v1 v2)))
 ;; checks
-(check-expect (+vec-w/modulo (make-vector 12 5) (make-vector 12 5))
+(check-expect (vec-modulo (make-vector 12 5) (make-vector 12 5))
               (make-vector 24 10))
-(check-expect (+vec-w/modulo (make-vector WIDTH 5) (make-vector 12 5))
+(check-expect (vec-modulo (make-vector WIDTH 5) (make-vector 12 5))
               (make-vector 12 10))
-(check-expect (+vec-w/modulo (make-vector 0 5) (make-vector -12 5))
+(check-expect (vec-modulo (make-vector 0 5) (make-vector -12 5))
               (make-vector (- WIDTH 12) 10))
 
 
