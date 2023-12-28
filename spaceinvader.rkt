@@ -14,9 +14,10 @@
 (define ALTITUDE 100)
 (define GROUNDLEVEL (- HEIGHT ALTITUDE))
 (define BLASTRADIUS 75)
-(define NUMINVADERS 10)
+(define BOMBBLASTRADIUS 35)
+(define NUMINVADERS 20)
 (define COOLDOWN 14)
-(define INVADERCOOLDOWN 56)
+(define INVADERCOOLDOWN 112)
 (define BACKGROUND
   (overlay/align "left" "bottom"
                  (rectangle WIDTH ALTITUDE "solid" "light green")
@@ -27,7 +28,7 @@
 (define INVADER (overlay (circle 20 "solid" "green")
                          (rectangle 80 20 "solid" "green")))
 (define MISSILE (rectangle 16 40 "solid" "red"))
-(define BOMB (circle 10 "solid" "black"))
+(define BOMB (circle 10 "solid" "green"))
 (define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
 (define DETONATION (radial-star 8 20 50 "solid" "red"))
 (define HIT (overlay
@@ -109,27 +110,11 @@
 
 
 (define (control objs ke)
-  ; !!! refactor this shtuff
   ; WarObjects -> WarObjects
   ; move tank with left- and right-arrows, and fire missile on spacebar
   (cond
-    [(and (key=? ke " ") (<= (unit-cooldown (war-objects-tank objs)) 0))
-     (make-war-objects
-      (make-unit
-       (unit-position (war-objects-tank objs))
-       (unit-velocity (war-objects-tank objs))
-       COOLDOWN)
-      (war-objects-invaders objs)
-      (cons (fire-missile (war-objects-tank objs))
-            (war-objects-missiles objs))
-      (war-objects-bombs objs)
-      (war-objects-explosions objs))]
-    [else (make-war-objects
-           (tank-control (war-objects-tank objs) ke)
-           (war-objects-invaders objs)
-           (war-objects-missiles objs)
-           (war-objects-bombs objs)
-           (war-objects-explosions objs))]))
+    [(key=? ke " ") (fire-missile objs)]
+    [else (accel-tank objs ke)]))
 ; checks
 (check-expect (control
                (make-war-objects INITTANKPARAMS
@@ -167,7 +152,6 @@
 (define (render objs)
   ; WarObjects -> Img
   ; display the scene with current positions of all war objects
-  ; !!! tank explosion
   (render-list-of-stuff
    (war-objects-explosions objs) HIT
    (render-list-of-stuff
@@ -369,7 +353,11 @@
   ; [ListOf Unit] [ListOf Parameter] -> [ListOf Unit]
   ; delete unit of an element of swarm1 that has
   ; made contact with an element of swarm2
-  (second-order-filter andmap avoid-flak? swarm1 swarm2))
+  (local (
+          (define (got-flak? i j)
+            (avoid-flak? i j BLASTRADIUS)))
+    ; - IN -
+    (second-order-filter andmap got-flak? swarm1 swarm2)))
 
 
 (define (detonation swarm1 swarm2)
@@ -377,7 +365,7 @@
   ; move unit of detonated missile to explosion list
   (local (
           (define (smack-flak? i j)
-            (not (avoid-flak? i j))))
+            (not (avoid-flak? i j BLASTRADIUS))))
     ; - IN -
     (second-order-filter ormap smack-flak? swarm1 swarm2)))
 
@@ -411,54 +399,65 @@
 (define (tank-destroyed? tank bombs)
   ; Unit [ListOf Unit] -> Bool
   ; tank destroyed by bomb
-  (ormap (lambda (b) (not (avoid-flak? tank b))) bombs))
+  (local (
+          (define (tank-smack? b)
+            (not (avoid-flak? tank b BOMBBLASTRADIUS))))
+    ; - IN -
+    (ormap tank-smack? bombs)))
 
 
-(define (fire-missile tank)
+(define (fire-missile objs)
   ; WeaponObjects -> Unit
   ; fire missile on spacebar; missile takes x-position and velocity of tank
-  (make-unit (unit-position tank)
-             (+vec (unit-velocity tank) MISSILEVELOCITY) 0))
-; checks
-(check-expect (fire-missile
-               (make-unit (make-vector 27 42) TANKSPEED 0))
-              (make-unit (make-vector 27 42)
-                         (+vec TANKSPEED MISSILEVELOCITY) 0))
+  (local (
+          (define tank (war-objects-tank objs)))
+    ; - IN -
+    (cond
+      [(<= (unit-cooldown tank) 0)
+       (make-war-objects
+        (make-unit
+         (unit-position tank)
+         (unit-velocity tank)
+         COOLDOWN)
+        (war-objects-invaders objs)
+        (cons
+         (make-unit (unit-position tank)
+                    (+vec (unit-velocity tank) MISSILEVELOCITY) 0)
+         (war-objects-missiles objs))
+        (war-objects-bombs objs)
+        (war-objects-explosions objs))]
+      [else objs])))
 
 
-(define (tank-control tank ke)
-  ; Unit, Key Event -> Unit
+(define (accel-tank objs ke)
+  ; WarObjects KeyEvent -> Unit
   ; send tank left with left arrow or right with right
-  (make-unit
-   (unit-position tank)
-   (cond
-     [(key=? ke "left") (-vec (unit-velocity tank) TANKSPEED)]
-     [(key=? ke "right") (+vec (unit-velocity tank) TANKSPEED)]
-     [else (unit-velocity tank)])
-   (unit-cooldown tank)))
-; checks
-(check-expect (tank-control
-               INITTANKPARAMS "left")
-              (make-unit
-               (unit-position INITTANKPARAMS)
-               (-vec (unit-velocity INITTANKPARAMS) TANKSPEED) 0))
-(check-expect (tank-control
-               INITTANKPARAMS "right")
-              (make-unit
-               (unit-position INITTANKPARAMS)
-               (+vec (unit-velocity INITTANKPARAMS) TANKSPEED) 0))
-(check-expect (tank-control INITTANKPARAMS "p") INITTANKPARAMS)
+  (local (
+          (define tank (war-objects-tank objs)))
+    ; - IN -
+    (make-war-objects
+     (make-unit
+      (unit-position tank)
+      (cond
+        [(key=? ke "left") (-vec (unit-velocity tank) TANKSPEED)]
+        [(key=? ke "right") (+vec (unit-velocity tank) TANKSPEED)]
+        [else (unit-velocity tank)])
+      (unit-cooldown tank))
+     (war-objects-invaders objs)
+     (war-objects-missiles objs)
+     (war-objects-bombs objs)
+     (war-objects-explosions objs))))
 
 
-(define (avoid-flak? obj1 obj2)
-  ; Parameter, Unit -> Bool
+(define (avoid-flak? obj1 obj2 radius)
+  ; Unit Unit -> Bool
   ; if distance between obj1 and obj2 is greater than radius, return #t
   (local (
           (define delta-p (-vec (unit-position obj1)
                                 (unit-position obj2)))
           (define dist (normalize delta-p)))
     ; - IN-
-    (> dist BLASTRADIUS)))
+    (> dist radius)))
 
 
 (define (vector-arithmetic op v1 v2)
