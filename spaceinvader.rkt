@@ -326,11 +326,7 @@
 (define (tank-destroyed? tank bombs)
   ; Unit [ListOf Unit] -> Bool
   ; tank destroyed by bomb
-  (local (
-          (define (tank-smack? b)
-            (catch-flak? tank b BOMBBLASTRADIUS)))
-    ; - IN -
-    (ormap tank-smack? bombs)))
+  (ormap (lambda (b) (catch-flak? tank b BOMBBLASTRADIUS)) bombs))
 
 
 (define (render-list-of-stuff loprms img bkgd)
@@ -427,47 +423,39 @@
 ; must be defined inside the scope of the outer function in order to access
 ; the variable i--which exists only in the scope of the outer function--
 ; without taking it as an argument
-  #;
-  (local (
-          (define (outer-func1 i)
-            (local (
-                    (define (inner-func j)
-                      (fpred i j)))
-              ; - IN -
-              (fmap inner-func obj-lst))))
-    ; - IN -
-    (filter outer-func1 subj-lst))
+#;
+(local (
+        (define (outer-func1 i)
+          (local (
+                  (define (inner-func j)
+                    (fpred i j)))
+            ; - IN -
+            (fmap inner-func obj-lst))))
+  ; - IN -
+  (filter outer-func1 subj-lst))
 
 
 (define (cull-missile-hits swarm1 swarm2)
   ; [ListOf Unit] [ListOf Parameter] -> [ListOf Unit]
   ; delete unit of an element of swarm1 that has
   ; made contact with an element of swarm2
-  (local (
-          (define (avoid-flak? i j)
-            (not (catch-flak? i j BLASTRADIUS))))
-    ; - IN -
-    (second-order-filter andmap avoid-flak? swarm1 swarm2)))
+  (second-order-filter andmap
+                       (lambda (i j) (not (catch-flak? i j BLASTRADIUS)))
+                       swarm1 swarm2))
 
 
 (define (detonation swarm1 swarm2)
   ; [ListOf Unit] [ListOf Unit] -> [ListOf Unit]
   ; move unit of detonated missile to explosion list
-  (local (
-          (define (smack-flak? i j)
-            (catch-flak? i j BLASTRADIUS)))
-    ; - IN -
-    (second-order-filter ormap smack-flak? swarm1 swarm2)))
+  (second-order-filter ormap
+                       (lambda (i j) (catch-flak? i j BLASTRADIUS))
+                       swarm1 swarm2))
 
 
 (define (delete-misses lop)
   ; [ListOf Unit] -> [ListOf Unit]
   ; delete missiles, and bombs fireballs that exit stage top/bottom
-  (local (
-          (define (overshot? p)
-            (< 0 (vector-y (unit-position p)) HEIGHT)))
-    ; - IN -
-    (filter overshot? lop)))
+  (filter (lambda (p) (< 0 (vector-y (unit-position p)) HEIGHT)) lop))
 
 
 (define (catch-flak? obj1 obj2 radius)
@@ -507,11 +495,7 @@
 (define (vec-modulo v1 v2)
   ; Vector, Vector -> Vector
   ; add one vector to another
-  (local (
-          (define (mod x y)
-            (modulo (+ x y) WIDTH)))
-    ; -IN -
-    (vector-arithmetic mod v1 v2)))
+  (vector-arithmetic (lambda (x y) (modulo (+ x y) WIDTH)) v1 v2))
 ; checks
 (check-expect (vec-modulo (make-vector 12 5) (make-vector 12 5))
               (make-vector 24 10))
