@@ -177,7 +177,12 @@
      (render-list-of-stuff
       (war-objects-invaders objs) INVADER
       (render-list-of-stuff
-       (list (war-objects-tank objs)) TANK BACKGROUND))))))
+       (list (war-objects-tank objs))
+       (cond
+         [(tank-destroyed? (war-objects-tank objs) (war-objects-bombs objs))
+          DESTRUCTION]
+         [else TANK])
+       BACKGROUND))))))
 
 
 (define (victory-or-defeat? objs)
