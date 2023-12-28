@@ -328,7 +328,7 @@
   ; tank destroyed by bomb
   (local (
           (define (tank-smack? b)
-            (not (avoid-flak? tank b BOMBBLASTRADIUS))))
+            (catch-flak? tank b BOMBBLASTRADIUS)))
     ; - IN -
     (ormap tank-smack? bombs)))
 
@@ -433,10 +433,10 @@
   ; delete unit of an element of swarm1 that has
   ; made contact with an element of swarm2
   (local (
-          (define (got-flak? i j)
-            (avoid-flak? i j BLASTRADIUS)))
+          (define (avoid-flak? i j)
+            (not (catch-flak? i j BLASTRADIUS))))
     ; - IN -
-    (second-order-filter andmap got-flak? swarm1 swarm2)))
+    (second-order-filter andmap avoid-flak? swarm1 swarm2)))
 
 
 (define (detonation swarm1 swarm2)
@@ -444,7 +444,7 @@
   ; move unit of detonated missile to explosion list
   (local (
           (define (smack-flak? i j)
-            (not (avoid-flak? i j BLASTRADIUS))))
+            (catch-flak? i j BLASTRADIUS)))
     ; - IN -
     (second-order-filter ormap smack-flak? swarm1 swarm2)))
 
@@ -459,15 +459,15 @@
     (filter overshot? lop)))
 
 
-(define (avoid-flak? obj1 obj2 radius)
+(define (catch-flak? obj1 obj2 radius)
   ; Unit Unit -> Bool
-  ; if distance between obj1 and obj2 is greater than radius, return #t
+  ; if distance between obj1 and obj2 is less than radius, return #t
   (local (
           (define delta-p (-vec (unit-position obj1)
                                 (unit-position obj2)))
           (define dist (normalize delta-p)))
     ; - IN-
-    (> dist radius)))
+    (< dist radius)))
 
 
 (define (vector-arithmetic op v1 v2)
