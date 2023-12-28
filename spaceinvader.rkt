@@ -39,6 +39,8 @@
 ; =============================
 ;; data definitions
 
+; !!! add bombs dropped by invaders
+
 (define-struct war-objects [tank invaders missiles explosions cooldown])
 ;; A WarObjects is a [Parameters [ListOf Parameter]
 ;; [ListOf Parameters] [ListOf Parameters] Number]
@@ -99,21 +101,10 @@
   ;; WarObjects -> WarObjects
   ;; war objects move around in accordance with user input and hard wiring
   (make-war-objects
-   ; tank
    (move (war-objects-tank objs))
-   ; invaders
-   (move-stuff (jitter (hit
-                        (war-objects-invaders objs)
-                        (war-objects-missiles objs))))
-   ; missiles
-   (move-stuff (delete-misses (hit (war-objects-missiles objs)
-                                   (war-objects-invaders objs)
-                                   )))
-   ; explosions
-   (move-stuff (delete-misses (append
-                               (war-objects-explosions objs)
-                               (rise (detonation (war-objects-invaders objs)
-                                                 (war-objects-missiles objs))))))
+   (move-invaders objs)
+   (move-missiles objs)
+   (move-explosions objs)
    (sub1 (war-objects-cooldown objs))))
 
 
@@ -219,16 +210,58 @@
    (render objs)))
 
 
-(define (move params)
+(define (move object)
   ;; Parameters -> Parameters
   ;; update position vector with velocity
   (make-parameters
-   (+vec-w/modulo (parameters-position params) (parameters-velocity params))
-   (parameters-velocity params)))
-;; checks
+   (+vec-w/modulo (parameters-position object) (parameters-velocity object))
+   (parameters-velocity object)))
+; checks
 (check-expect (move (make-parameters (make-vector 12 5) (make-vector 12 5)))
               (make-parameters (make-vector 24 10) (make-vector 12 5)))
 
+
+(define (move-invaders objs)
+  ; WarObjects -> (ListOf Parameters]
+  ; delete destroyed invaders, jitter the survivors around
+  ; and move them purposefully downward
+  (local (
+          (define invaders (war-objects-invaders objs))
+          (define missiles (war-objects-missiles objs))
+          (define survivors (cull-missile-hits invaders missiles))
+          (define jittery-survivors (jitter survivors)))
+    ; - IN -
+    (move-stuff jittery-survivors)))
+
+
+(define (move-missiles objs)
+  ; WarObjects -> [ListOf Parameters]
+  ; delete exploded missiles, delete those that leave screen
+  ; and move the rest purposefully upward
+  (local (
+          (define missiles (war-objects-missiles objs))
+          (define invaders (war-objects-invaders objs))
+          (define dry-powder (cull-missile-hits missiles invaders))
+          (define in-play (delete-misses dry-powder)))
+    ; - IN -
+    (move-stuff in-play)))
+
+
+(define (move-explosions objs)
+; WarObjects -> [ListOf Parameters]
+; conver destroved invaders into fireballs, propel them upward,
+; delete those outside field of play and move the rest purposefully upward
+(local (
+        (define explosions (war-objects-explosions objs))
+        (define invaders (war-objects-invaders objs))
+        (define missiles (war-objects-missiles objs))
+        (define fresh-explosions (detonation invaders missiles))
+        (define rising-fireballs (rise fresh-explosions))
+        (define remaining-faders (delete-misses explosions))
+        (define total-carnage (append remaining-faders rising-fireballs)))
+  ; -IN -
+   (move-stuff  total-carnage)))
+                               
 
 (define (move-stuff loprms)
   ; [ListOf Parameters]  -> [ListOf Parameters]
@@ -249,16 +282,6 @@
     (map jitter invaders)))
 
 
-(define (hit swarm1 swarm2)
-  ;; [ListOf Parameters] [ListOf Parameter] -> [ListOf Parameters]
-  ;; delete parameters of an element of swarm1 that has
-  ;; made contact with an element of swarm2
-  (filter (lambda (i)
-            (andmap (lambda (j)
-                      (avoid-flak? i j))
-                    swarm2)) swarm1))
-
-
 (define (rise explosions)
   ;; [ListOf Parameters] -> [ListOf Parameters]
   ;; move parameters of detonated missile to explosion list
@@ -268,6 +291,18 @@
              (parameters-position pars)
              (+vec (parameters-velocity pars) MISSILEVELOCITY))))  
     (map flip-velo explosions)))
+
+
+; !!! abstract these next two functions
+
+(define (cull-missile-hits swarm1 swarm2)
+  ;; [ListOf Parameters] [ListOf Parameter] -> [ListOf Parameters]
+  ;; delete parameters of an element of swarm1 that has
+  ;; made contact with an element of swarm2
+  (filter (lambda (i)
+            (andmap (lambda (j)
+                      (avoid-flak? i j))
+                    swarm2)) swarm1))
 
 
 (define (detonation swarm1 swarm2)
@@ -287,17 +322,6 @@
             (> (vector-y (parameters-position p)) 0)))
     ; - IN -
     (filter overshot? lop)))
-
-
-(define (avoid-flak? obj1 obj2)
-  ;; Parameter, Parameters -> Bool
-  ;; if distance between obj1 and obj2 is greater than radius, return #t
-  (local (
-          (define delta-p (-vec (parameters-position obj1)
-                                (parameters-position obj2)))
-          (define dist (normalize delta-p)))
-    ; - IN-
-    (> dist BLASTRADIUS)))
           
 
 (define (alien-invasion? tank invaders)
@@ -350,6 +374,19 @@
                (+vec (parameters-velocity INITTANKPARAMS) TANKSPEED)))
 (check-expect (tank-control INITTANKPARAMS "p") INITTANKPARAMS)
 
+
+(define (avoid-flak? obj1 obj2)
+  ;; Parameter, Parameters -> Bool
+  ;; if distance between obj1 and obj2 is greater than radius, return #t
+  (local (
+          (define delta-p (-vec (parameters-position obj1)
+                                (parameters-position obj2)))
+          (define dist (normalize delta-p)))
+    ; - IN-
+    (> dist BLASTRADIUS)))
+
+
+; !!! abstract vector arithmetic function
 
 (define (+vec v1 v2)
   ;; Vector, Vector -> Vector
