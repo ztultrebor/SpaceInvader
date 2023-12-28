@@ -6,36 +6,6 @@
 
 ; A space-invaders-like game
 
-; ===============================
-; constants
-
-(define WIDTH 1400)
-(define HEIGHT 750)
-(define ALTITUDE 100)
-(define GROUNDLEVEL (- HEIGHT ALTITUDE))
-(define BLASTRADIUS 75)
-(define BOMBBLASTRADIUS 35)
-(define NUMINVADERS 20)
-(define COOLDOWN 14)
-(define INVADERCOOLDOWN 112)
-(define BACKGROUND
-  (overlay/align "left" "bottom"
-                 (rectangle WIDTH ALTITUDE "solid" "light green")
-                 (empty-scene WIDTH HEIGHT "midnight blue")))
-(define TANK (overlay/align "center" "bottom"
-                            (rectangle 50 20 "solid" "red")
-                            (rectangle 20 50 "solid" "red")))
-(define INVADER (overlay (circle 20 "solid" "green")
-                         (rectangle 80 20 "solid" "green")))
-(define MISSILE (rectangle 16 40 "solid" "red"))
-(define BOMB (circle 10 "solid" "green"))
-(define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
-(define DETONATION (radial-star 8 20 50 "solid" "red"))
-(define HIT (overlay
-             (radial-star 20 12 48 "solid" "white")
-             (radial-star 10 32 72 "solid" "light purple")))
-(define GAMEOVERTEXTCOLOR "white")
-
 
 ; =============================
 ; data definitions
@@ -83,6 +53,51 @@
 (define (fn-with-vector vec)
   (... (vector-x vec) ...)
   (... (vector-y vec) ...))
+
+
+
+; ===============================
+; constants
+
+(define WIDTH 1400)
+(define HEIGHT 750)
+(define ALTITUDE 100)
+(define GROUNDLEVEL (- HEIGHT ALTITUDE))
+(define BLASTRADIUS 75)
+(define BOMBBLASTRADIUS 35)
+(define NUMINVADERS 20)
+(define COOLDOWN 14)
+(define INVADERCOOLDOWN 112)
+(define BACKGROUND
+  (overlay/align "left" "bottom"
+                 (rectangle WIDTH ALTITUDE "solid" "light green")
+                 (empty-scene WIDTH HEIGHT "midnight blue")))
+(define TANK (overlay/align "center" "bottom"
+                            (rectangle 50 20 "solid" "red")
+                            (rectangle 20 50 "solid" "red")))
+(define INVADER (overlay (circle 20 "solid" "green")
+                         (rectangle 80 20 "solid" "green")))
+(define MISSILE (rectangle 16 40 "solid" "red"))
+(define BOMB (circle 10 "solid" "green"))
+(define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
+(define DETONATION (radial-star 8 20 50 "solid" "red"))
+(define HIT (overlay
+             (radial-star 10 8 72 "solid" "white")
+             (radial-star 10 32 72 "solid" "light purple")))
+(define GAMEOVERTEXTCOLOR "white")
+(define INITTANKPARAMS
+  (make-unit (make-vector (/ WIDTH 2) GROUNDLEVEL)
+             (make-vector 0 0) 0))
+(define INITINVADERS
+  (build-list NUMINVADERS
+              (lambda (x)
+                (make-unit (make-vector (/ WIDTH 2) 50)
+                           (make-vector 0 1) (random INVADERCOOLDOWN)))))
+(define MISSILEVELOCITY (make-vector 0 -10))
+(define TANKSPEED (make-vector 3 0))
+(define WAROBJECTS (make-war-objects
+                    INITTANKPARAMS INITINVADERS '() '() '()))
+
 
 
 ; ==================================
@@ -515,18 +530,5 @@
 
 ; ===========================
 ; actions!
-
-(define INITTANKPARAMS
-  (make-unit (make-vector (/ WIDTH 2) GROUNDLEVEL)
-             (make-vector 0 0) 0))
-(define INITINVADERS
-  (build-list NUMINVADERS
-              (lambda (x)
-                (make-unit (make-vector (/ WIDTH 2) 50)
-                           (make-vector 0 1) (random INVADERCOOLDOWN)))))
-(define MISSILEVELOCITY (make-vector 0 -10))
-(define TANKSPEED (make-vector 3 0))
-(define WAROBJECTS (make-war-objects
-                    INITTANKPARAMS INITINVADERS '() '() '()))
 
 (main WAROBJECTS)
