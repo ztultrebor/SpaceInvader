@@ -16,6 +16,7 @@
 (define BLASTRADIUS 75)
 (define NUMINVADERS 100)
 (define COOLDOWN 14)
+(define INVADERCOOLDOWN 56)
 (define BACKGROUND
   (overlay/align "left" "bottom"
                  (rectangle WIDTH ALTITUDE "solid" "light green")
@@ -26,7 +27,7 @@
 (define INVADER (overlay (circle 20 "solid" "green")
                          (rectangle 80 20 "solid" "green")))
 (define MISSILE (rectangle 16 40 "solid" "red"))
-(define BOMB (circle 10 "solid" "green"))
+(define BOMB (circle 10 "solid" "black"))
 (define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
 (define DETONATION (radial-star 8 20 50 "solid" "red"))
 (define HIT (overlay
@@ -51,9 +52,9 @@
   (make-war-objects
    (fn-with-tank (war-objects-tank objs))
    (fn-with-invaders (war-objects-invaders objs))
-   (fn-with-missiles (war-objects-missiles objs)))
-  (fn-with-bombs (war-objects-bombs objs))
-  (fn-with-explosions (war-objects-explosions objs)))
+   (fn-with-missiles (war-objects-missiles objs))
+   (fn-with-bombs (war-objects-bombs objs))
+   (fn-with-explosions (war-objects-explosions objs))))
 
 
 ; A [ListOf Unit] is one of
@@ -69,7 +70,7 @@
 (define-struct unit [position velocity cooldown])
 ; A Unit is a [Vector Vector Number]
 ; gives the position in pixels and velocity in pixels/tick
-;     of a weapon
+;     of a weapon, along with a cooldown timefor firing a weapon in ticks
 #;
 (define (fn-with-unit params)
   (... (unit-position params) ...)
@@ -107,16 +108,10 @@
    (move-missiles objs)
    (move-bombs objs)
    (move-explosions objs)))
-   
-
-(define (drawdown obj)
-  (make-unit
-   (unit-position obj)
-   (unit-velocity obj)
-   (sub1 (unit-cooldown obj))))
 
 
 (define (control objs ke)
+  ; !!! refactor this shtuff
   ; WarObjects -> WarObjects
   ; move tank with left- and right-arrows, and fire missile on spacebar
   (cond
@@ -180,7 +175,7 @@
   (render-list-of-stuff
    (war-objects-explosions objs) HIT
    (render-list-of-stuff
-    (war-objects-explosions objs) BOMB
+    (war-objects-bombs objs) BOMB
     (render-list-of-stuff
      (war-objects-missiles objs) MISSILE
      (render-list-of-stuff
@@ -266,9 +261,29 @@
 
 (define (move-bombs objs)
   ; WarObjects -> [ListOf Unit]
-  ; delete exploded bombs, delete those that leave screen
-  ; and move the rest purposefully downward
-  (war-objects-bombs objs))
+  ; release fresh bombs, delete exploded bombs,
+  ; delete those that leave screen and move the rest purposefully downward
+  (local (
+          (define bombs (war-objects-bombs objs))
+          (define invaders (war-objects-invaders objs))
+          (define new-releases (drop-bombs bombs invaders))
+          (define in-play (delete-misses bombs))
+          (define all-bombs (append in-play new-releases)))
+    ; - IN -
+    (move-stuff all-bombs)))
+            
+
+; !!! drop bombs
+(define (drop-bombs bombs invaders)
+  ; [ListOf Unit] [ListOf Unit] -> [ListOf Unit]
+  ; release bombs when invader cooldown reaches zero
+  (local (
+          (define bombers (filter
+                           (lambda (x) (< (unit-cooldown x) 0))
+                           invaders)))
+    (map (lambda (x) (make-unit (unit-position x)
+                                (+vec (unit-velocity x) (make-vector 0 10))
+                                0)) bombers)))
 
 
 (define (move-explosions objs)
@@ -284,7 +299,7 @@
           (define remaining-faders (delete-misses explosions))
           (define total-carnage (append remaining-faders rising-fireballs)))
     ; -IN -
-    (move-stuff  total-carnage)))
+    (move-stuff total-carnage)))
                                
 
 (define (move-stuff loprms)
@@ -297,13 +312,13 @@
   ; [ListOf Unit] -> [ListOf Unit]
   ; jitter a group of invaders
   (local (
-          (define (jitter invader)
+          (define (random-jerks invader)
             (make-unit
              (unit-position invader)
              (make-vector (+ (random 51) -25)
                           (vector-y (unit-velocity invader))) 0)))
     ; - IN -
-    (map jitter invaders)))
+    (map random-jerks invaders)))
 
 
 (define (rise explosions)
@@ -348,12 +363,21 @@
 
 (define (delete-misses lop)
   ; [ListOf Unit] -> [ListOf Unit]
-  ; delete missiles and fireballs that exit stage top
+  ; delete missiles, and bombs fireballs that exit stage top/bottom
   (local (
           (define (overshot? p)
             (< 0 (vector-y (unit-position p)) HEIGHT)))
     ; - IN -
     (filter overshot? lop)))
+
+
+(define (drawdown obj)
+  ; Unit -> Unit
+  ; decrement the unit's reaining cooldown time by 1
+  (make-unit
+   (unit-position obj)
+   (unit-velocity obj)
+   (sub1 (unit-cooldown obj))))
           
 
 (define (alien-invasion? tank invaders)
@@ -481,10 +505,12 @@
 ; ===========================
 ; actions!
 
-(define INITTANKPARAMS (make-unit (make-vector (/ WIDTH 2) GROUNDLEVEL)
-                                  (make-vector 0 0) 0))
-(define INITINVADERPARAMS (make-unit (make-vector (/ WIDTH 2) 50)
-                                     (make-vector 0 1) (random 56)))
+(define INITTANKPARAMS
+  (make-unit (make-vector (/ WIDTH 2) GROUNDLEVEL)
+             (make-vector 0 0) 0))
+(define INITINVADERPARAMS
+  (make-unit (make-vector (/ WIDTH 2) 50)
+             (make-vector 0 1) (random INVADERCOOLDOWN)))
 (define MISSILEVELOCITY (make-vector 0 -10))
 (define TANKSPEED (make-vector 3 0))
 (define WAROBJECTS (make-war-objects
