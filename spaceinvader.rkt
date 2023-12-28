@@ -39,8 +39,6 @@
 ; =============================
 ; data definitions
 
-; !!! add bombs dropped by invaders
-
 (define-struct war-objects [tank invaders missiles bombs explosions])
 ; A WarObjects is a [Unit [ListOf Unit]
 ; [ListOf Unit] [ListOf Unit] [ListOf Unit]]
@@ -182,13 +180,13 @@
        (list (war-objects-tank objs)) TANK BACKGROUND))))))
 
 
-; !!! tank destroyed by bomb?
 (define (victory-or-defeat? objs)
   ; WarObjects -> Bool
   ; ends when all invaders are destroyed or one invader successfully lands
   (or
    (empty? (war-objects-invaders objs))
-   (alien-invasion? (war-objects-tank objs) (war-objects-invaders objs))))
+   (alien-invasion? (war-objects-tank objs) (war-objects-invaders objs))
+   (tank-destroyed? (war-objects-tank objs) (war-objects-bombs objs))))
 ; checks
 (check-expect (victory-or-defeat?
                (make-war-objects
@@ -403,6 +401,12 @@
                INITTANKPARAMS (list INITTANKPARAMS)) #t)
 (check-expect (alien-invasion?
                INITTANKPARAMS INITINVADERS) #f)
+
+
+(define (tank-destroyed? tank bombs)
+  ; Unit [ListOf Unit] -> Bool
+  ; tank destroyed by bomb
+  (ormap (lambda (b) (not (avoid-flak? tank b))) bombs))
 
 
 (define (fire-missile tank)
