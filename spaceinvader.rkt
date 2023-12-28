@@ -85,7 +85,7 @@
   (... (vector-y vec) ...))
 
 
-
+; ==================================
 ; functions
 
 (define (main objs)
@@ -101,12 +101,16 @@
 (define (deploy objs)
   ; WarObjects -> WarObjects
   ; war objects move around in accordance with user input and hard wiring
-  (make-war-objects
-   (drawdown (move (war-objects-tank objs)))
-   (move-invaders objs)
-   (move-missiles objs)
-   (move-bombs objs)
-   (move-explosions objs)))
+  (local (
+          (define invaders (war-objects-invaders objs))
+          (define missiles (war-objects-missiles objs)))
+    ; - IN- 
+    (make-war-objects
+     (move-tank (war-objects-tank objs))
+     (move-invaders invaders missiles)
+     (move-missiles missiles invaders)
+     (move-bombs (war-objects-bombs objs) invaders)
+     (move-explosions (war-objects-explosions objs) invaders missiles))))
 
 
 (define (control objs ke)
@@ -201,6 +205,145 @@
    (render objs)))
 
 
+(define (move-tank tank)
+  ; Unit -> Unit
+  ; update tank location and cooldown
+  (move (drawdown tank)))
+
+
+(define (move-invaders invaders missiles)
+  ; WarObjects -> (ListOf Unit]
+  ; delete destroyed invaders, jitter the survivors around
+  ; and move them purposefully downward
+  (local (
+          (define survivors (cull-missile-hits invaders missiles))
+          (define jittery-survivors (map jitter survivors))
+          (define cooldown-resets (map reset-cooldown jittery-survivors))
+          (define cooled-down-jitterers (map drawdown cooldown-resets)))
+    ; - IN -
+    (move-stuff cooled-down-jitterers)))
+; checks
+(check-expect (unit-cooldown
+               (first (move-invaders INITINVADERS (list INITTANKPARAMS))))
+              (sub1 (unit-cooldown (first INITINVADERS))))
+
+
+(define (move-missiles missiles invaders)
+  ; WarObjects -> [ListOf Unit]
+  ; delete exploded missiles, delete those that leave screen
+  ; and move the rest purposefully upward
+  (local (
+          (define dry-powder (cull-missile-hits missiles invaders))
+          (define in-play (delete-misses dry-powder)))
+    ; - IN -
+    (move-stuff in-play)))
+
+
+(define (move-bombs bombs invaders)
+  ; WarObjects -> [ListOf Unit]
+  ; release fresh bombs, delete exploded bombs,
+  ; delete those that leave screen and move the rest purposefully downward
+  (local (
+          (define new-releases (drop-bombs bombs invaders))
+          (define in-play (delete-misses bombs))
+          (define all-bombs (append in-play new-releases)))
+    ; - IN -
+    (move-stuff all-bombs)))
+
+
+(define (move-explosions explosions invaders missiles)
+  ; WarObjects -> [ListOf Unit]
+  ; conver destroved invaders into fireballs, propel them upward,
+  ; delete those outside field of play and move the rest purposefully upward
+  (local (
+          (define fresh-explosions (detonation invaders missiles))
+          (define rising-fireballs (rarify fresh-explosions))
+          (define remaining-faders (delete-misses explosions))
+          (define total-carnage (append remaining-faders rising-fireballs)))
+    ; -IN -
+    (move-stuff total-carnage)))
+
+
+(define (fire-missile objs)
+  ; WeaponObjects -> Unit
+  ; fire missile on spacebar; missile takes x-position and velocity of tank
+  (local (
+          (define tank (war-objects-tank objs)))
+    ; - IN -
+    (cond
+      [(<= (unit-cooldown tank) 0)
+       (make-war-objects
+        (make-unit
+         (unit-position tank)
+         (unit-velocity tank)
+         COOLDOWN)
+        (war-objects-invaders objs)
+        (cons
+         (make-unit (unit-position tank)
+                    (+vec (unit-velocity tank) MISSILEVELOCITY) 0)
+         (war-objects-missiles objs))
+        (war-objects-bombs objs)
+        (war-objects-explosions objs))]
+      [else objs])))
+
+
+(define (accel-tank objs ke)
+  ; WarObjects KeyEvent -> Unit
+  ; send tank left with left arrow or right with right
+  (local (
+          (define tank (war-objects-tank objs)))
+    ; - IN -
+    (make-war-objects
+     (make-unit
+      (unit-position tank)
+      (cond
+        [(key=? ke "left") (-vec (unit-velocity tank) TANKSPEED)]
+        [(key=? ke "right") (+vec (unit-velocity tank) TANKSPEED)]
+        [else (unit-velocity tank)])
+      (unit-cooldown tank))
+     (war-objects-invaders objs)
+     (war-objects-missiles objs)
+     (war-objects-bombs objs)
+     (war-objects-explosions objs))))
+
+
+(define (alien-invasion? tank invaders)
+  ; Paramerters, Unit -> Bool
+  ; aliens have landed! (maybe)
+  (and
+   (not (empty? invaders))
+   (or
+    (>= (vector-y (unit-position (first invaders)))
+        (vector-y (unit-position tank)))
+    (alien-invasion? tank (rest invaders)))))
+; checks
+(check-expect (alien-invasion?
+               INITTANKPARAMS (list INITTANKPARAMS)) #t)
+(check-expect (alien-invasion?
+               INITTANKPARAMS INITINVADERS) #f)
+
+
+(define (tank-destroyed? tank bombs)
+  ; Unit [ListOf Unit] -> Bool
+  ; tank destroyed by bomb
+  (local (
+          (define (tank-smack? b)
+            (not (avoid-flak? tank b BOMBBLASTRADIUS))))
+    ; - IN -
+    (ormap tank-smack? bombs)))
+
+
+(define (render-list-of-stuff loprms img bkgd)
+  ; ListOfUnit Img -> Img
+  ; render a list of objects as the given image onto the given background
+  (cond
+    [(empty? loprms) bkgd]
+    [else (place-image img
+                       (vector-x (unit-position (first loprms)))
+                       (vector-y (unit-position (first loprms)))
+                       (render-list-of-stuff (rest loprms) img bkgd))]))
+
+
 (define (move object)
   ; Unit -> Unit
   ; update position vector with velocity
@@ -212,74 +355,30 @@
               (make-unit (make-vector 24 10) (make-vector 12 5) 0))
 
 
-(define (move-invaders objs)
-  ; WarObjects -> (ListOf Unit]
-  ; delete destroyed invaders, jitter the survivors around
-  ; and move them purposefully downward
-  (local (
-          (define invaders (war-objects-invaders objs))
-          (define missiles (war-objects-missiles objs))
-          (define survivors (cull-missile-hits invaders missiles))
-          (define jittery-survivors (map jitter survivors))
-          (define cooldown-resets (map reset-cooldown jittery-survivors))
-          (define cooled-down-jitterers (map drawdown cooldown-resets)))
-    ; - IN -
-    (move-stuff cooled-down-jitterers)))
-; checks
-(check-expect (unit-cooldown
-               (first (move-invaders (make-war-objects INITTANKPARAMS
-                                                       INITINVADERS
-                                                       '() '() '()))))
-              (sub1 (unit-cooldown (first INITINVADERS))))
-
-
-(define (move-missiles objs)
-  ; WarObjects -> [ListOf Unit]
-  ; delete exploded missiles, delete those that leave screen
-  ; and move the rest purposefully upward
-  (local (
-          (define missiles (war-objects-missiles objs))
-          (define invaders (war-objects-invaders objs))
-          (define dry-powder (cull-missile-hits missiles invaders))
-          (define in-play (delete-misses dry-powder)))
-    ; - IN -
-    (move-stuff in-play)))
-
-
-(define (move-bombs objs)
-  ; WarObjects -> [ListOf Unit]
-  ; release fresh bombs, delete exploded bombs,
-  ; delete those that leave screen and move the rest purposefully downward
-  (local (
-          (define bombs (war-objects-bombs objs))
-          (define invaders (war-objects-invaders objs))
-          (define new-releases (drop-bombs bombs invaders))
-          (define in-play (delete-misses bombs))
-          (define all-bombs (append in-play new-releases)))
-    ; - IN -
-    (move-stuff all-bombs)))
-
-
-(define (move-explosions objs)
-  ; WarObjects -> [ListOf Unit]
-  ; conver destroved invaders into fireballs, propel them upward,
-  ; delete those outside field of play and move the rest purposefully upward
-  (local (
-          (define explosions (war-objects-explosions objs))
-          (define invaders (war-objects-invaders objs))
-          (define missiles (war-objects-missiles objs))
-          (define fresh-explosions (detonation invaders missiles))
-          (define rising-fireballs (rise fresh-explosions))
-          (define remaining-faders (delete-misses explosions))
-          (define total-carnage (append remaining-faders rising-fireballs)))
-    ; -IN -
-    (move-stuff total-carnage)))
-
-
 (define (move-stuff loprms)
   ; [ListOf Unit]  -> [ListOf Unit]
   ; update Unit that are organized into lists
   (map move loprms))
+
+
+(define (drawdown obj)
+  ; Unit -> Unit
+  ; decrement the unit's reaining cooldown time by 1
+  (make-unit
+   (unit-position obj)
+   (unit-velocity obj)
+   (sub1 (unit-cooldown obj))))
+
+
+(define (reset-cooldown invader)
+  ; [ListOf Unit] -> [ListOf Unit]
+  ; reset invader cooldowns after bomb release
+  (make-unit
+   (unit-position invader)
+   (unit-velocity invader)
+   (cond
+     [(< (unit-cooldown invader) 0) (random INVADERCOOLDOWN)]
+     [else (unit-cooldown invader)])))
 
 
 (define (jitter invader)
@@ -306,27 +405,7 @@
     (map make-bomb-unit bombers)))
 
 
-(define (drawdown obj)
-  ; Unit -> Unit
-  ; decrement the unit's reaining cooldown time by 1
-  (make-unit
-   (unit-position obj)
-   (unit-velocity obj)
-   (sub1 (unit-cooldown obj))))
-
-
-(define (reset-cooldown invader)
-  ; [ListOf Unit] -> [ListOf Unit]
-  ; reset invader cooldowns after bomb release
-  (make-unit
-   (unit-position invader)
-   (unit-velocity invader)
-   (cond
-     [(< (unit-cooldown invader) 0) (random INVADERCOOLDOWN)]
-     [else (unit-cooldown invader)])))
-
-    
-(define (rise explosions)
+(define (rarify explosions)
   ; [ListOf Unit] -> [ListOf Unit]
   ; move unit of detonated missile to explosion list
   (local (
@@ -378,75 +457,6 @@
             (< 0 (vector-y (unit-position p)) HEIGHT)))
     ; - IN -
     (filter overshot? lop)))
-          
-
-(define (alien-invasion? tank invaders)
-  ; Paramerters, Unit -> Bool
-  ; aliens have landed! (maybe)
-  (and
-   (not (empty? invaders))
-   (or
-    (>= (vector-y (unit-position (first invaders)))
-        (vector-y (unit-position tank)))
-    (alien-invasion? tank (rest invaders)))))
-; checks
-(check-expect (alien-invasion?
-               INITTANKPARAMS (list INITTANKPARAMS)) #t)
-(check-expect (alien-invasion?
-               INITTANKPARAMS INITINVADERS) #f)
-
-
-(define (tank-destroyed? tank bombs)
-  ; Unit [ListOf Unit] -> Bool
-  ; tank destroyed by bomb
-  (local (
-          (define (tank-smack? b)
-            (not (avoid-flak? tank b BOMBBLASTRADIUS))))
-    ; - IN -
-    (ormap tank-smack? bombs)))
-
-
-(define (fire-missile objs)
-  ; WeaponObjects -> Unit
-  ; fire missile on spacebar; missile takes x-position and velocity of tank
-  (local (
-          (define tank (war-objects-tank objs)))
-    ; - IN -
-    (cond
-      [(<= (unit-cooldown tank) 0)
-       (make-war-objects
-        (make-unit
-         (unit-position tank)
-         (unit-velocity tank)
-         COOLDOWN)
-        (war-objects-invaders objs)
-        (cons
-         (make-unit (unit-position tank)
-                    (+vec (unit-velocity tank) MISSILEVELOCITY) 0)
-         (war-objects-missiles objs))
-        (war-objects-bombs objs)
-        (war-objects-explosions objs))]
-      [else objs])))
-
-
-(define (accel-tank objs ke)
-  ; WarObjects KeyEvent -> Unit
-  ; send tank left with left arrow or right with right
-  (local (
-          (define tank (war-objects-tank objs)))
-    ; - IN -
-    (make-war-objects
-     (make-unit
-      (unit-position tank)
-      (cond
-        [(key=? ke "left") (-vec (unit-velocity tank) TANKSPEED)]
-        [(key=? ke "right") (+vec (unit-velocity tank) TANKSPEED)]
-        [else (unit-velocity tank)])
-      (unit-cooldown tank))
-     (war-objects-invaders objs)
-     (war-objects-missiles objs)
-     (war-objects-bombs objs)
-     (war-objects-explosions objs))))
 
 
 (define (avoid-flak? obj1 obj2 radius)
@@ -506,17 +516,6 @@
   (sqrt (+ (sqr (vector-x vec)) (sqr (vector-y vec)))))
 ; checks
 (check-expect (normalize (make-vector 30 40 )) 50)
-
-
-(define (render-list-of-stuff loprms img bkgd)
-  ; ListOfUnit Img -> Img
-  ; render a list of objects as the given image onto the given background
-  (cond
-    [(empty? loprms) bkgd]
-    [else (place-image img
-                       (vector-x (unit-position (first loprms)))
-                       (vector-y (unit-position (first loprms)))
-                       (render-list-of-stuff (rest loprms) img bkgd))]))
 
 
 ; ===========================
