@@ -14,7 +14,7 @@
 (define ALTITUDE 100)
 (define GROUNDLEVEL (- HEIGHT ALTITUDE))
 (define BLASTRADIUS 75)
-(define NUMINVADERS 100)
+(define NUMINVADERS 10)
 (define COOLDOWN 14)
 (define INVADERCOOLDOWN 56)
 (define BACKGROUND
@@ -104,7 +104,7 @@
   ; war objects move around in accordance with user input and hard wiring
   (make-war-objects
    (drawdown (move (war-objects-tank objs)))
-   (map drawdown (move-invaders objs))
+   (move-invaders objs)
    (move-missiles objs)
    (move-bombs objs)
    (move-explosions objs)))
@@ -135,33 +135,31 @@
 ; checks
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '() '()) "left")
+                                 INITINVADERS '() '() '()) "left")
               (make-war-objects
                (make-unit (unit-position INITTANKPARAMS)
                           (+vec (unit-velocity INITTANKPARAMS)
                                 (make-vector -3 0)) 0)
-               (list INITINVADERPARAMS) '() '() '()))
+               INITINVADERS '() '() '()))
 (check-expect (control
                (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '() '()) "right")
+                                 INITINVADERS '() '() '()) "right")
               (make-war-objects
                (make-unit (unit-position INITTANKPARAMS)
                           (+vec (unit-velocity INITTANKPARAMS)
                                 (make-vector 3 0)) 0)
-               (list INITINVADERPARAMS) '() '() '()))
+               INITINVADERS '() '() '()))
 (check-expect (control
-               (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '() '()) "\r")
+               (make-war-objects INITTANKPARAMS INITINVADERS '() '() '()) "\r")
               (make-war-objects
-               INITTANKPARAMS (list INITINVADERPARAMS) '() '() '()))
+               INITTANKPARAMS INITINVADERS '() '() '()))
 (check-expect (control
-               (make-war-objects INITTANKPARAMS
-                                 (list INITINVADERPARAMS) '() '() '()) " ")
+               (make-war-objects INITTANKPARAMS INITINVADERS '() '() '()) " ")
               (make-war-objects
                (make-unit (unit-position INITTANKPARAMS)
                           (unit-velocity INITTANKPARAMS)
                           COOLDOWN)
-               (list INITINVADERPARAMS)
+               INITINVADERS
                (list (make-unit
                       (unit-position INITTANKPARAMS)
                       (+vec (unit-velocity INITTANKPARAMS)
@@ -194,17 +192,11 @@
 ; checks
 (check-expect (victory-or-defeat?
                (make-war-objects
-                INITTANKPARAMS (list INITINVADERPARAMS) '() '() '())) #f)
+                INITTANKPARAMS INITINVADERS '() '() '())) #f)
 (check-expect (victory-or-defeat?
                (make-war-objects
-                INITINVADERPARAMS (list INITTANKPARAMS) '() '() '())) #t)
-(check-expect (victory-or-defeat?
-               (make-war-objects
-                INITTANKPARAMS (list INITINVADERPARAMS)
+                INITTANKPARAMS INITINVADERS
                 (list INITTANKPARAMS) '() '())) #f)
-(check-expect (victory-or-defeat?
-               (make-war-objects INITINVADERPARAMS (list INITTANKPARAMS)
-                                 (list INITINVADERPARAMS) '() '())) #t)
 
 
 (define (render-game-over objs)
@@ -241,9 +233,17 @@
           (define invaders (war-objects-invaders objs))
           (define missiles (war-objects-missiles objs))
           (define survivors (cull-missile-hits invaders missiles))
-          (define jittery-survivors (jitter survivors)))
+          (define jittery-survivors (map jitter survivors))
+          (define cooldown-resets (map reset-cooldown jittery-survivors))
+          (define cooled-down-jitterers (map drawdown cooldown-resets)))
     ; - IN -
-    (move-stuff jittery-survivors)))
+    (move-stuff cooled-down-jitterers)))
+; checks
+(check-expect (unit-cooldown
+               (first (move-invaders (make-war-objects INITTANKPARAMS
+                                                       INITINVADERS
+                                                       '() '() '()))))
+              (sub1 (unit-cooldown (first INITINVADERS))))
 
 
 (define (move-missiles objs)
@@ -271,19 +271,6 @@
           (define all-bombs (append in-play new-releases)))
     ; - IN -
     (move-stuff all-bombs)))
-            
-
-; !!! drop bombs
-(define (drop-bombs bombs invaders)
-  ; [ListOf Unit] [ListOf Unit] -> [ListOf Unit]
-  ; release bombs when invader cooldown reaches zero
-  (local (
-          (define bombers (filter
-                           (lambda (x) (< (unit-cooldown x) 0))
-                           invaders)))
-    (map (lambda (x) (make-unit (unit-position x)
-                                (+vec (unit-velocity x) (make-vector 0 10))
-                                0)) bombers)))
 
 
 (define (move-explosions objs)
@@ -300,7 +287,7 @@
           (define total-carnage (append remaining-faders rising-fireballs)))
     ; -IN -
     (move-stuff total-carnage)))
-                               
+
 
 (define (move-stuff loprms)
   ; [ListOf Unit]  -> [ListOf Unit]
@@ -308,19 +295,50 @@
   (map move loprms))
 
 
-(define (jitter invaders)
-  ; [ListOf Unit] -> [ListOf Unit]
-  ; jitter a group of invaders
+(define (jitter invader)
+  ; Unit -> Unit
+  ; add some jitter to an invader's horizontal velocity
+  (make-unit
+   (unit-position invader)
+   (make-vector (+ (random 51) -25)
+                (vector-y (unit-velocity invader)))
+   (unit-cooldown invader)))
+
+
+(define (drop-bombs bombs invaders)
+  ; [ListOf Unit] [ListOf Unit] -> [ListOf Unit]
+  ; release bombs when invader cooldown reaches zero
   (local (
-          (define (random-jerks invader)
-            (make-unit
-             (unit-position invader)
-             (make-vector (+ (random 51) -25)
-                          (vector-y (unit-velocity invader))) 0)))
+          (define bombers (filter
+                           (lambda (x) (< (unit-cooldown x) 0))
+                           invaders))
+          (define (make-bomb-unit b)
+            (make-unit (unit-position b)
+                       (+vec (unit-velocity b) (make-vector 0 10)) 0)))
     ; - IN -
-    (map random-jerks invaders)))
+    (map make-bomb-unit bombers)))
 
 
+(define (drawdown obj)
+  ; Unit -> Unit
+  ; decrement the unit's reaining cooldown time by 1
+  (make-unit
+   (unit-position obj)
+   (unit-velocity obj)
+   (sub1 (unit-cooldown obj))))
+
+
+(define (reset-cooldown invader)
+  ; [ListOf Unit] -> [ListOf Unit]
+  ; reset invader cooldowns after bomb release
+  (make-unit
+   (unit-position invader)
+   (unit-velocity invader)
+   (cond
+     [(< (unit-cooldown invader) 0) (random INVADERCOOLDOWN)]
+     [else (unit-cooldown invader)])))
+
+    
 (define (rise explosions)
   ; [ListOf Unit] -> [ListOf Unit]
   ; move unit of detonated missile to explosion list
@@ -369,15 +387,6 @@
             (< 0 (vector-y (unit-position p)) HEIGHT)))
     ; - IN -
     (filter overshot? lop)))
-
-
-(define (drawdown obj)
-  ; Unit -> Unit
-  ; decrement the unit's reaining cooldown time by 1
-  (make-unit
-   (unit-position obj)
-   (unit-velocity obj)
-   (sub1 (unit-cooldown obj))))
           
 
 (define (alien-invasion? tank invaders)
@@ -391,9 +400,9 @@
     (alien-invasion? tank (rest invaders)))))
 ; checks
 (check-expect (alien-invasion?
-               INITTANKPARAMS (list INITINVADERPARAMS)) #f)
-(check-expect (alien-invasion?
                INITTANKPARAMS (list INITTANKPARAMS)) #t)
+(check-expect (alien-invasion?
+               INITTANKPARAMS INITINVADERS) #f)
 
 
 (define (fire-missile tank)
@@ -508,13 +517,14 @@
 (define INITTANKPARAMS
   (make-unit (make-vector (/ WIDTH 2) GROUNDLEVEL)
              (make-vector 0 0) 0))
-(define INITINVADERPARAMS
-  (make-unit (make-vector (/ WIDTH 2) 50)
-             (make-vector 0 1) (random INVADERCOOLDOWN)))
+(define INITINVADERS
+  (build-list NUMINVADERS
+              (lambda (x)
+                (make-unit (make-vector (/ WIDTH 2) 50)
+                           (make-vector 0 1) (random INVADERCOOLDOWN)))))
 (define MISSILEVELOCITY (make-vector 0 -10))
 (define TANKSPEED (make-vector 3 0))
 (define WAROBJECTS (make-war-objects
-                    INITTANKPARAMS
-                    (make-list NUMINVADERS INITINVADERPARAMS) '() '() '()))
+                    INITTANKPARAMS INITINVADERS '() '() '()))
 
 (main WAROBJECTS)
