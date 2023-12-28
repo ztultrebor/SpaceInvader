@@ -4,6 +4,7 @@
 (require 2htdp/image)
 (require 2htdp/universe)
 
+; A space-invaders-like game
 
 ; ===============================
 ; constants
@@ -12,9 +13,7 @@
 (define HEIGHT 750)
 (define ALTITUDE 100)
 (define GROUNDLEVEL (- HEIGHT ALTITUDE))
-
 (define BLASTRADIUS 75)
-
 (define NUMINVADERS 100)
 (define COOLDOWN 14)
 (define BACKGROUND
@@ -33,7 +32,6 @@
              (radial-star 20 12 48 "solid" "white")
              (radial-star 10 32 72 "solid" "light purple")))
 (define GAMEOVERTEXTCOLOR "white")
-
 
 
 ; =============================
@@ -293,25 +291,33 @@
     (map flip-velo explosions)))
 
 
-; !!! abstract these next two functions
+(define (second-order-filter fmap fpred subj-lst obj-lst)
+; [[Parameters Parameters -> Boolean] [ListOf Parameters] -> Boolean]
+  ; [Parameters Parameters -> Boolean] [ListOf Parameters]
+  ; [ListOf Parameters] -> [ListOf Parameters]
+  ; abstract function that enables a filtration that requires
+  ; recursion over two lists
+  (filter (lambda (i)
+            (fmap (lambda (j)
+                    (fpred i j))
+                  obj-lst)) subj-lst))
+
 
 (define (cull-missile-hits swarm1 swarm2)
   ;; [ListOf Parameters] [ListOf Parameter] -> [ListOf Parameters]
   ;; delete parameters of an element of swarm1 that has
   ;; made contact with an element of swarm2
-  (filter (lambda (i)
-            (andmap (lambda (j)
-                      (avoid-flak? i j))
-                    swarm2)) swarm1))
+  (second-order-filter andmap avoid-flak? swarm1 swarm2))
 
 
 (define (detonation swarm1 swarm2)
   ;; [ListOf Parameters] [ListOf Parameters] -> [ListOf Parameters]
   ;; move parameters of detonated missile to explosion list
-  (filter (lambda (i)
-            (ormap (lambda (j)
-                     (not (avoid-flak? i j)))
-                   swarm2)) swarm1))
+  (local (
+          (define (smack-flak? i j)
+            (not (avoid-flak? i j))))
+    ; - IN -
+  (second-order-filter ormap smack-flak? swarm1 swarm2)))
 
 
 (define (delete-misses lop)
