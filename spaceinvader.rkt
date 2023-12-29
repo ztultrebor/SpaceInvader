@@ -231,7 +231,7 @@
   ; delete destroyed invaders, jitter the survivors around
   ; and move them purposefully downward
   (local (
-          (define survivors (cull-missile-hits invaders missiles))
+          (define survivors (cull-strikes invaders missiles))
           (define jittery-survivors (map jitter survivors))
           (define cooldown-resets (map reset-cooldown jittery-survivors))
           (define cooled-down-jitterers (map drawdown cooldown-resets)))
@@ -248,7 +248,7 @@
   ; delete exploded missiles, delete those that leave screen
   ; and move the rest purposefully upward
   (local (
-          (define dry-powder (cull-missile-hits missiles invaders))
+          (define dry-powder (cull-strikes missiles invaders))
           (define in-play (delete-misses dry-powder)))
     ; - IN -
     (move-stuff in-play)))
@@ -341,7 +341,7 @@
 (define (tank-destroyed? tank bombs)
   ; Unit [ListOf Unit] -> Bool
   ; tank destroyed by bomb
-  (ormap (lambda (b) (catch-flak? tank b BOMBBLASTRADIUS)) bombs))
+  (ormap (lambda (bomb) (catch-flak? tank bomb BOMBBLASTRADIUS)) bombs))
 
 
 (define (render-list-of-stuff loprms img bkgd)
@@ -450,27 +450,30 @@
   (filter outer-func1 subj-lst))
 
 
-(define (cull-missile-hits swarm1 swarm2)
+(define (cull-strikes swarm1 swarm2)
   ; [ListOf Unit] [ListOf Parameter] -> [ListOf Unit]
   ; delete unit of an element of swarm1 that has
   ; made contact with an element of swarm2
   (second-order-filter andmap
-                       (lambda (i j) (not (catch-flak? i j BLASTRADIUS)))
+                       (lambda (swarm1-obj swarm2-obj)
+                         (not (catch-flak? swarm1-obj swarm2-obj BLASTRADIUS)))
                        swarm1 swarm2))
 
 
-(define (detonation swarm1 swarm2)
+(define (detonation invaders missiles)
   ; [ListOf Unit] [ListOf Unit] -> [ListOf Unit]
   ; move unit of detonated missile to explosion list
   (second-order-filter ormap
-                       (lambda (i j) (catch-flak? i j BLASTRADIUS))
-                       swarm1 swarm2))
+                       (lambda (invader missile)
+                         (catch-flak? invader missile BLASTRADIUS))
+                       invaders missiles))
 
 
-(define (delete-misses lop)
+(define (delete-misses swarm)
   ; [ListOf Unit] -> [ListOf Unit]
-  ; delete missiles, and bombs fireballs that exit stage top/bottom
-  (filter (lambda (p) (< 0 (vector-y (unit-position p)) HEIGHT)) lop))
+  ; delete missiles, bombs and fireballs that exit stage top/bottom
+  (filter (lambda (swarm-obj)
+            (< 0 (vector-y (unit-position swarm-obj)) HEIGHT)) swarm))
 
 
 (define (catch-flak? obj1 obj2 radius)
