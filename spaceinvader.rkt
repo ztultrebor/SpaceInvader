@@ -78,7 +78,8 @@
 (define INVADER (overlay (circle 20 "solid" "green")
                          (rectangle 80 20 "solid" "green")))
 (define MISSILE (rectangle 16 40 "solid" "red"))
-(define BOMB (circle 10 "solid" "green"))
+(define BOMB (overlay (circle 10 "outline" "white")
+                      (circle 10 "solid" "black")))
 (define DESTRUCTION (radial-star 12 50 100 "solid" "red"))
 (define DETONATION (radial-star 8 20 50 "solid" "red"))
 (define HIT (overlay
@@ -341,7 +342,7 @@
 (define (tank-destroyed? tank bombs)
   ; Unit [ListOf Unit] -> Bool
   ; tank destroyed by bomb
-  (ormap (lambda (bomb) (catch-flak? tank bomb BOMBBLASTRADIUS)) bombs))
+  (ormap (lambda (bomb) ((catch-flak? tank BOMBBLASTRADIUS) bomb )) bombs))
 
 
 (define (render-list-of-stuff loprms img bkgd)
@@ -450,22 +451,22 @@
   (filter outer-func1 subj-lst))
 
 
-(define (cull-strikes swarm1 swarm2)
+(define (cull-strikes subj-swarm obj-swarm)
   ; [ListOf Unit] [ListOf Parameter] -> [ListOf Unit]
   ; delete unit of an element of swarm1 that has
   ; made contact with an element of swarm2
   (second-order-filter andmap
-                       (lambda (swarm1-obj swarm2-obj)
-                         (not (catch-flak? swarm1-obj swarm2-obj BLASTRADIUS)))
-                       swarm1 swarm2))
+                       (lambda (subj obj)
+                         (not ((catch-flak? subj BLASTRADIUS) obj)))
+                       subj-swarm obj-swarm))
 
 
 (define (detonation invaders missiles)
   ; [ListOf Unit] [ListOf Unit] -> [ListOf Unit]
-  ; move unit of detonated missile to explosion list
+  ; move unit of destroyed invader to explosion list
   (second-order-filter ormap
                        (lambda (invader missile)
-                         (catch-flak? invader missile BLASTRADIUS))
+                         ((catch-flak? invader BLASTRADIUS) missile))
                        invaders missiles))
 
 
@@ -476,15 +477,16 @@
             (< 0 (vector-y (unit-position swarm-obj)) HEIGHT)) swarm))
 
 
-(define (catch-flak? obj1 obj2 radius)
+(define (catch-flak? subj radius)
   ; Unit Unit -> Bool
   ; if distance between obj1 and obj2 is less than radius, return #t
-  (local (
-          (define delta-p (-vec (unit-position obj1)
-                                (unit-position obj2)))
-          (define dist (normalize delta-p)))
-    ; - IN-
-    (< dist radius)))
+  (lambda (obj)
+    (local (
+            (define delta-p (-vec (unit-position subj)
+                                  (unit-position obj)))
+            (define dist (normalize delta-p)))
+      ; - IN-
+      (< dist radius))))
 
 
 (define (vector-arithmetic op v1 v2)
