@@ -66,7 +66,7 @@
 (define BLASTRADIUS 75)
 (define BOMBBLASTRADIUS 35)
 (define NUMINVADERS 20)
-(define COOLDOWN 14)
+(define COOLDOWN 10)
 (define INVADERCOOLDOWN 112)
 (define BACKGROUND
   (overlay/align "left" "bottom"
@@ -92,7 +92,7 @@
 (define INITINVADERS
   (build-list NUMINVADERS
               (lambda (x)
-                (make-unit (make-vector (/ WIDTH 2) 50)
+                (make-unit (make-vector (random WIDTH) 50)
                            (make-vector 0 1) (random INVADERCOOLDOWN)))))
 (define MISSILEVELOCITY (make-vector 0 -10))
 (define TANKSPEED (make-vector 3 0))
@@ -478,7 +478,7 @@
 
 
 (define (catch-flak? subj radius)
-  ; Unit Unit -> Bool
+  ; Unit Number -> [Unit -> Boolean]
   ; if distance between obj1 and obj2 is less than radius, return #t
   (lambda (obj)
     (local (
