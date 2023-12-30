@@ -3,6 +3,7 @@
 #reader(lib "htdp-intermediate-lambda-reader.ss" "lang")((modname spaceinvader) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
 (require 2htdp/image)
 (require 2htdp/universe)
+(require 2htdp/abstraction)
 
 ; A space-invaders-like game
 
@@ -132,9 +133,11 @@
 (define (control objs ke)
   ; WarObjects -> WarObjects
   ; move tank with left- and right-arrows, and fire missile on spacebar
-  (cond
-    [(key=? ke " ") (fire-missile objs)]
-    [else (accel-tank objs ke)]))
+  (match ke
+    [" " (fire-missile objs)]
+    ["left" (accel-tank objs ke)]
+    ["right" (accel-tank objs ke)]
+    [key-event? objs]))
 ; checks
 (check-expect (control
                (make-war-objects INITTANKPARAMS
@@ -312,10 +315,9 @@
     (make-war-objects
      (make-unit
       (unit-position tank)
-      (cond
-        [(key=? ke "left") (-vec (unit-velocity tank) TANKSPEED)]
-        [(key=? ke "right") (+vec (unit-velocity tank) TANKSPEED)]
-        [else (unit-velocity tank)])
+      (match ke
+        ["left" (-vec (unit-velocity tank) TANKSPEED)]
+        ["right" (+vec (unit-velocity tank) TANKSPEED)])
       (unit-cooldown tank))
      (war-objects-invaders objs)
      (war-objects-missiles objs)
@@ -348,12 +350,12 @@
 (define (render-list-of-stuff loprms img bkgd)
   ; ListOfUnit Img -> Img
   ; render a list of objects as the given image onto the given background
-  (cond
-    [(empty? loprms) bkgd]
-    [else (place-image img
-                       (vector-x (unit-position (first loprms)))
-                       (vector-y (unit-position (first loprms)))
-                       (render-list-of-stuff (rest loprms) img bkgd))]))
+  (match loprms
+    ['() bkgd]
+    [(cons pre post) (place-image img
+                       (vector-x (unit-position pre))
+                       (vector-y (unit-position pre))
+                       (render-list-of-stuff post img bkgd))]))
 
 
 (define (move object)
@@ -388,9 +390,9 @@
   (make-unit
    (unit-position invader)
    (unit-velocity invader)
-   (cond
-     [(< (unit-cooldown invader) 0) (random INVADERCOOLDOWN)]
-     [else (unit-cooldown invader)])))
+   (match (unit-cooldown invader)
+     [0 (random INVADERCOOLDOWN)]
+     [cd cd])))
 
 
 (define (jitter invader)
@@ -408,7 +410,7 @@
   ; release bombs when invader cooldown reaches zero
   (local (
           (define (fire-when-ready inv)
-            (< (unit-cooldown inv) 0))
+            (= (unit-cooldown inv) 0))
           (define bombers (filter fire-when-ready invaders))
           (define (make-bomb-unit b)
             (make-unit (unit-position b)
